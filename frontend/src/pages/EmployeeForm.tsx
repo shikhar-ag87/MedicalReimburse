@@ -14,6 +14,12 @@ import {
 } from "lucide-react";
 import { FormData, ValidationErrors, initialFormData } from "../types/form";
 import { validateStep } from "../utils/validation";
+import {
+    useApplicationSubmission,
+    useServerHealth,
+    useAutoSave,
+    useSavedFormData,
+} from "../hooks/useApi";
 import EmployeeDetailsStep from "../components/form/EmployeeDetailsStep";
 import PatientDetailsStep from "../components/form/PatientDetailsStep";
 import TreatmentDetailsStep from "../components/form/TreatmentDetailsStep";
@@ -27,36 +33,28 @@ const EmployeeForm = () => {
     const [validationErrors, setValidationErrors] = useState<ValidationErrors>(
         {}
     );
-    const [isAutoSaving, setIsAutoSaving] = useState(false);
-    const [isSubmitted, setIsSubmitted] = useState(false);
 
-    // Auto-save functionality
+    // API integration hooks
+    const {
+        submitApplication,
+        isSubmitting,
+        isSubmitted,
+        submissionResult,
+        error: submissionError,
+        resetSubmission,
+    } = useApplicationSubmission();
+
+    const { isServerOnline } = useServerHealth();
+    const { isAutoSaving } = useAutoSave(formData);
+    const savedFormData = useSavedFormData();
+
+    // Load saved form data on mount
     useEffect(() => {
-        const savedData = localStorage.getItem("jnu-medical-form");
-        if (savedData) {
-            try {
-                const parsedData = JSON.parse(savedData);
-                setFormData(parsedData);
-            } catch (error) {
-                console.error("Error parsing saved form data:", error);
-            }
+        if (savedFormData && !isSubmitted) {
+            setFormData(savedFormData);
+            console.log("Restored form data from localStorage");
         }
-    }, []);
-
-    useEffect(() => {
-        if (!isSubmitted) {
-            setIsAutoSaving(true);
-            const saveTimer = setTimeout(() => {
-                localStorage.setItem(
-                    "jnu-medical-form",
-                    JSON.stringify(formData)
-                );
-                setIsAutoSaving(false);
-            }, 1000);
-
-            return () => clearTimeout(saveTimer);
-        }
-    }, [formData, isSubmitted]);
+    }, [savedFormData, isSubmitted]);
 
     const updateFormData = (section: keyof FormData, data: any) => {
         setFormData((prev) => ({
@@ -101,24 +99,12 @@ const EmployeeForm = () => {
 
     const handleSubmit = async () => {
         try {
-            // Here you would normally send the data to your backend API
-            console.log("Submitting form data:", formData);
-
-            // Simulate API call
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-
-            // Clear saved form data
-            localStorage.removeItem("jnu-medical-form");
-            setIsSubmitted(true);
-
-            // Show success message or redirect
-            alert(
-                "Application submitted successfully! Reference ID: MR-2024-" +
-                    Date.now()
-            );
+            console.log("Submitting application with form data:", formData);
+            await submitApplication(formData);
+            console.log("Application submitted successfully");
         } catch (error) {
-            console.error("Error submitting form:", error);
-            alert("Error submitting form. Please try again.");
+            console.error("Error submitting application:", error);
+            // Error is handled by the hook
         }
     };
 
@@ -206,7 +192,7 @@ const EmployeeForm = () => {
     const completedSteps = currentStep - 1;
     const progressPercentage = (completedSteps / steps.length) * 100;
 
-    if (isSubmitted) {
+    if (isSubmitted && submissionResult) {
         return (
             <div className="max-w-3xl mx-auto">
                 <div className="card-gov text-center py-12">
@@ -220,19 +206,86 @@ const EmployeeForm = () => {
                     </p>
                     <div className="bg-gov-secondary-50 p-4 rounded-lg mb-6">
                         <p className="text-gov-secondary-800 font-semibold">
-                            Reference ID: MR-2024-{Date.now()}
+                            Application ID: {submissionResult.applicationId}
+                        </p>
+                        <p className="text-gov-secondary-800 font-semibold">
+                            Reference Number:{" "}
+                            {submissionResult.applicationNumber}
                         </p>
                         <p className="text-gov-secondary-700 text-sm mt-2">
-                            Please save this reference ID for tracking your
+                            Status:{" "}
+                            <span className="capitalize font-semibold">
+                                {submissionResult.status}
+                            </span>
+                        </p>
+                        <p className="text-gov-secondary-700 text-sm">
+                            Submitted:{" "}
+                            {new Date(
+                                submissionResult.submittedAt
+                            ).toLocaleString()}
+                        </p>
+                        <p className="text-gov-secondary-700 text-sm mt-2">
+                            Please save this reference number for tracking your
                             application status.
                         </p>
                     </div>
-                    <button
-                        className="btn-gov-primary"
-                        onClick={() => window.location.reload()}
-                    >
-                        Submit New Application
-                    </button>
+                    <div className="flex gap-4 justify-center">
+                        <button
+                            className="btn-gov-primary"
+                            onClick={() => {
+                                resetSubmission();
+                                setFormData(initialFormData);
+                                setCurrentStep(1);
+                            }}
+                        >
+                            Submit New Application
+                        </button>
+                        <button
+                            className="btn-gov-secondary"
+                            onClick={() => window.print()}
+                        >
+                            Print Confirmation
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // Show submission error if exists
+    if (submissionError) {
+        return (
+            <div className="max-w-3xl mx-auto">
+                <div className="card-gov text-center py-12">
+                    <AlertCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
+                    <h1 className="text-2xl font-bold text-red-800 mb-2">
+                        Submission Failed
+                    </h1>
+                    <p className="text-gov-neutral-600 mb-6">
+                        {submissionError}
+                    </p>
+                    <div className="flex gap-4 justify-center">
+                        <button
+                            className="btn-gov-primary"
+                            onClick={() => {
+                                resetSubmission();
+                                // Go back to last step to retry
+                                setCurrentStep(steps.length);
+                            }}
+                        >
+                            Try Again
+                        </button>
+                        <button
+                            className="btn-gov-secondary"
+                            onClick={() => {
+                                resetSubmission();
+                                setFormData(initialFormData);
+                                setCurrentStep(1);
+                            }}
+                        >
+                            Start Over
+                        </button>
+                    </div>
                 </div>
             </div>
         );
@@ -265,6 +318,23 @@ const EmployeeForm = () => {
                                         </div>
                                     )}
                                 </div>
+                                <div className="flex items-center space-x-2">
+                                    {isServerOnline ? (
+                                        <>
+                                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                            <span className="text-green-600">
+                                                Server Online
+                                            </span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                                            <span className="text-red-600">
+                                                Server Offline
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="text-right">
@@ -274,6 +344,14 @@ const EmployeeForm = () => {
                             <div className="text-xs text-gov-neutral-500">
                                 New Mehrauli Road, New Delhi
                             </div>
+                            {isSubmitting && (
+                                <div className="flex items-center space-x-2 text-gov-accent-600 mt-2">
+                                    <div className="w-4 h-4 border-2 border-gov-accent-600 border-t-transparent rounded-full animate-spin"></div>
+                                    <span className="text-sm">
+                                        Submitting...
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
