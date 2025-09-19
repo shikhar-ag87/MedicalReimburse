@@ -23,6 +23,13 @@ export interface DatabaseConnection {
     query<T = any>(sql: string, params?: any[]): Promise<T[]>;
     queryOne<T = any>(sql: string, params?: any[]): Promise<T | null>;
     transaction<T>(callback: (client: any) => Promise<T>): Promise<T>;
+
+    // Repository methods
+    getMedicalApplicationRepository(): MedicalApplicationRepository;
+    getExpenseItemRepository(): ExpenseItemRepository;
+    getApplicationDocumentRepository(): ApplicationDocumentRepository;
+    getUserRepository(): UserRepository;
+    getAuditLogRepository(): AuditLogRepository;
 }
 
 export interface DatabaseRepository<T, CreateData, UpdateData> {

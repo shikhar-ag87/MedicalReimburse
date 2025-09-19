@@ -1,25 +1,595 @@
 import express from "express";
+import jwt from "jsonwebtoken";
+import { asyncHandler } from "@/middleware/errorHandler";
+import { getDatabase } from "@/database/connection";
+import { logger } from "@/utils/logger";
+import { CreateAuditLogData } from "@/types/database";
 
 const router = express.Router();
 
-// Get dashboard stats
-router.get("/dashboard", (req, res) => {
-    res.json({ message: "Admin dashboard stats - to be implemented" });
-});
+// Authentication middleware for admin routes
+const authenticateAdmin = (req: any, res: any, next: any) => {
+    const token = req.headers.authorization?.replace("Bearer ", "");
 
-// Get all applications for review
-router.get("/applications", (req, res) => {
-    res.json({ message: "Applications for admin review - to be implemented" });
-});
+    if (!token) {
+        return res.status(401).json({
+            success: false,
+            message: "Access token required",
+        });
+    }
 
-// Get all users
-router.get("/users", (req, res) => {
-    res.json({ message: "User management - to be implemented" });
-});
+    try {
+        const decoded = jwt.verify(
+            token,
+            process.env.JWT_SECRET || "your-secret-key"
+        ) as any;
 
-// System settings
-router.get("/settings", (req, res) => {
-    res.json({ message: "System settings - to be implemented" });
-});
+        // Check if user has admin privileges
+        if (
+            !["admin", "super_admin", "medical_officer"].includes(decoded.role)
+        ) {
+            return res.status(403).json({
+                success: false,
+                message: "Admin privileges required",
+            });
+        }
+
+        req.user = decoded;
+        next();
+    } catch (error) {
+        return res.status(401).json({
+            success: false,
+            message: "Invalid or expired token",
+        });
+    }
+};
+
+// Get dashboard statistics
+router.get(
+    "/dashboard",
+    authenticateAdmin,
+    asyncHandler(async (req, res) => {
+        try {
+            const db = await getDatabase();
+            const applicationRepo = db.getMedicalApplicationRepository();
+            const userRepo = db.getUserRepository();
+
+            // Get application statistics
+            const applicationStats =
+                await applicationRepo.getApplicationStats();
+
+            // Get user statistics
+            const totalUsers = await userRepo.count();
+            const adminUsers = await userRepo.findByRole("admin");
+            const employeeUsers = await userRepo.findByRole("employee");
+            const medicalOfficers = await userRepo.findByRole(
+                "medical_officer"
+            );
+
+            // Get applications for review (pending and under review)
+            const pendingApplications = await applicationRepo.findByStatus(
+                "pending"
+            );
+            const reviewApplications = await applicationRepo.findByStatus(
+                "under_review"
+            );
+
+            const dashboardData = {
+                applications: {
+                    ...applicationStats,
+                    pendingCount: pendingApplications.length,
+                    underReviewCount: reviewApplications.length,
+                    recentApplications: [
+                        ...pendingApplications,
+                        ...reviewApplications,
+                    ]
+                        .sort(
+                            (a, b) =>
+                                new Date(b.submittedAt).getTime() -
+                                new Date(a.submittedAt).getTime()
+                        )
+                        .slice(0, 5),
+                },
+                users: {
+                    total: totalUsers,
+                    admins: adminUsers.length,
+                    employees: employeeUsers.length,
+                    medicalOfficers: medicalOfficers.length,
+                    recentUsers: await userRepo.findAll(), // In production, you'd want to limit this
+                },
+                system: {
+                    serverUptime: process.uptime(),
+                    nodeVersion: process.version,
+                    environment: process.env.NODE_ENV || "development",
+                    lastUpdated: new Date().toISOString(),
+                },
+            };
+
+            res.json({
+                success: true,
+                data: dashboardData,
+                message: "Dashboard statistics retrieved successfully",
+            });
+        } catch (error) {
+            logger.error("Dashboard stats error:", error);
+            throw error;
+        }
+    })
+);
+
+// Get all applications for admin review
+router.get(
+    "/applications",
+    authenticateAdmin,
+    asyncHandler(async (req, res) => {
+        const {
+            status,
+            page = 1,
+            limit = 20,
+            sortBy = "submittedAt",
+            sortOrder = "desc",
+        } = req.query;
+
+        try {
+            const db = await getDatabase();
+            const applicationRepo = db.getMedicalApplicationRepository();
+
+            let applications;
+            if (status) {
+                applications = await applicationRepo.findByStatus(
+                    status as any
+                );
+            } else {
+                applications = await applicationRepo.findAll();
+            }
+
+            // Sort applications
+            applications.sort((a, b) => {
+                const aValue = a[sortBy as keyof typeof a];
+                const bValue = b[sortBy as keyof typeof b];
+
+                if (sortOrder === "asc") {
+                    return aValue > bValue ? 1 : -1;
+                } else {
+                    return aValue < bValue ? 1 : -1;
+                }
+            });
+
+            // Pagination
+            const startIndex = (Number(page) - 1) * Number(limit);
+            const endIndex = startIndex + Number(limit);
+            const paginatedApplications = applications.slice(
+                startIndex,
+                endIndex
+            );
+
+            // Get additional details for each application
+            const enrichedApplications = await Promise.all(
+                paginatedApplications.map(async (app) => {
+                    const expenseRepo = db.getExpenseItemRepository();
+                    const documentRepo = db.getApplicationDocumentRepository();
+
+                    const expenses = await expenseRepo.findByApplicationId(
+                        app.id
+                    );
+                    const documents = await documentRepo.findByApplicationId(
+                        app.id
+                    );
+
+                    return {
+                        ...app,
+                        expenseCount: expenses.length,
+                        documentCount: documents.length,
+                        totalExpenseClaimed: expenses.reduce(
+                            (sum, exp) => sum + exp.amountClaimed,
+                            0
+                        ),
+                        totalExpensePassed: expenses.reduce(
+                            (sum, exp) => sum + exp.amountPassed,
+                            0
+                        ),
+                    };
+                })
+            );
+
+            res.json({
+                success: true,
+                data: {
+                    applications: enrichedApplications,
+                    pagination: {
+                        page: Number(page),
+                        limit: Number(limit),
+                        total: applications.length,
+                        totalPages: Math.ceil(
+                            applications.length / Number(limit)
+                        ),
+                    },
+                    filters: {
+                        status,
+                        sortBy,
+                        sortOrder,
+                    },
+                },
+                message: "Applications retrieved successfully",
+            });
+        } catch (error) {
+            logger.error("Admin applications error:", error);
+            throw error;
+        }
+    })
+);
+
+// Get all users for admin management
+router.get(
+    "/users",
+    authenticateAdmin,
+    asyncHandler(async (req, res) => {
+        const { role, page = 1, limit = 20, active } = req.query;
+
+        try {
+            const db = await getDatabase();
+            const userRepo = db.getUserRepository();
+
+            let users;
+            if (role) {
+                users = await userRepo.findByRole(role as any);
+            } else {
+                users = await userRepo.findAll();
+            }
+
+            // Filter by active status if specified
+            if (active !== undefined) {
+                const isActive = active === "true";
+                users = users.filter((user) => user.isActive === isActive);
+            }
+
+            // Remove password field for security
+            const safeUsers = users.map(({ password, ...user }) => user);
+
+            // Pagination
+            const startIndex = (Number(page) - 1) * Number(limit);
+            const endIndex = startIndex + Number(limit);
+            const paginatedUsers = safeUsers.slice(startIndex, endIndex);
+
+            res.json({
+                success: true,
+                data: {
+                    users: paginatedUsers,
+                    pagination: {
+                        page: Number(page),
+                        limit: Number(limit),
+                        total: users.length,
+                        totalPages: Math.ceil(users.length / Number(limit)),
+                    },
+                    filters: {
+                        role,
+                        active,
+                    },
+                },
+                message: "Users retrieved successfully",
+            });
+        } catch (error) {
+            logger.error("Admin users error:", error);
+            throw error;
+        }
+    })
+);
+
+// Update user status (activate/deactivate)
+router.patch(
+    "/users/:userId/status",
+    authenticateAdmin,
+    asyncHandler(async (req, res) => {
+        const { userId } = req.params;
+        const { isActive } = req.body;
+        const adminUserId = req.user.userId;
+
+        if (typeof isActive !== "boolean") {
+            return res.status(400).json({
+                success: false,
+                message: "isActive must be a boolean value",
+            });
+        }
+
+        try {
+            const db = await getDatabase();
+            const userRepo = db.getUserRepository();
+            const auditRepo = db.getAuditLogRepository();
+
+            // Check if user exists
+            const targetUser = await userRepo.findById(userId);
+            if (!targetUser) {
+                return res.status(404).json({
+                    success: false,
+                    message: "User not found",
+                });
+            }
+
+            // Prevent admin from deactivating themselves
+            if (userId === adminUserId && !isActive) {
+                return res.status(400).json({
+                    success: false,
+                    message: "You cannot deactivate your own account",
+                });
+            }
+
+            // Update user status
+            const updatedUser = await userRepo.update(userId, { isActive });
+
+            // Create audit log
+            const auditData: CreateAuditLogData = {
+                entityType: "user",
+                entityId: userId,
+                action: "update",
+                userId: adminUserId,
+                userEmail: req.user.email,
+                changes: {
+                    oldStatus: targetUser.isActive,
+                    newStatus: isActive,
+                    action: isActive ? "activated" : "deactivated",
+                },
+                ipAddress: req.ip,
+                userAgent: req.get("User-Agent"),
+            };
+            await auditRepo.create(auditData);
+
+            logger.info(
+                `User ${isActive ? "activated" : "deactivated"}: ${
+                    targetUser.email
+                }`,
+                {
+                    targetUserId: userId,
+                    adminUserId,
+                    newStatus: isActive,
+                }
+            );
+
+            res.json({
+                success: true,
+                message: `User ${
+                    isActive ? "activated" : "deactivated"
+                } successfully`,
+                data: {
+                    userId,
+                    isActive,
+                },
+            });
+        } catch (error) {
+            logger.error("Update user status error:", error);
+            throw error;
+        }
+    })
+);
+
+// Get system settings and configuration
+router.get(
+    "/settings",
+    authenticateAdmin,
+    asyncHandler(async (req, res) => {
+        try {
+            // System information
+            const systemSettings = {
+                application: {
+                    name:
+                        process.env.APP_NAME || "Medical Reimbursement System",
+                    version: process.env.APP_VERSION || "1.0.0",
+                    environment: process.env.NODE_ENV || "development",
+                },
+                database: {
+                    type: process.env.DATABASE_TYPE || "mock",
+                    connected: true, // You could check actual connection status
+                },
+                security: {
+                    jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
+                    rateLimitWindowMs:
+                        process.env.RATE_LIMIT_WINDOW_MS || "900000",
+                    rateLimitMax: process.env.RATE_LIMIT_MAX || "100",
+                },
+                features: {
+                    fileUploadEnabled: true,
+                    emailNotificationsEnabled: !!process.env.SMTP_HOST,
+                    auditLoggingEnabled: true,
+                },
+                server: {
+                    port: process.env.PORT || 3001,
+                    cors: {
+                        allowedOrigins: process.env.ALLOWED_ORIGINS?.split(
+                            ","
+                        ) || ["http://localhost:5173"],
+                    },
+                    uptime: process.uptime(),
+                    memory: process.memoryUsage(),
+                    nodeVersion: process.version,
+                },
+            };
+
+            res.json({
+                success: true,
+                data: systemSettings,
+                message: "System settings retrieved successfully",
+            });
+        } catch (error) {
+            logger.error("System settings error:", error);
+            throw error;
+        }
+    })
+);
+
+// Get audit logs (super admin only)
+router.get(
+    "/audit-logs",
+    authenticateAdmin,
+    asyncHandler(async (req, res) => {
+        // Check if user is super admin
+        if (req.user.role !== "super_admin") {
+            return res.status(403).json({
+                success: false,
+                message: "Super admin privileges required",
+            });
+        }
+
+        const {
+            entityType,
+            entityId,
+            userId,
+            page = 1,
+            limit = 50,
+            startDate,
+            endDate,
+        } = req.query;
+
+        try {
+            const db = await getDatabase();
+            const auditRepo = db.getAuditLogRepository();
+
+            let logs;
+
+            if (startDate && endDate) {
+                logs = await auditRepo.findByDateRange(
+                    new Date(startDate as string),
+                    new Date(endDate as string)
+                );
+            } else if (entityId && entityType) {
+                logs = await auditRepo.findByEntityId(
+                    entityType as any,
+                    entityId as string
+                );
+            } else if (userId) {
+                logs = await auditRepo.findByUserId(userId as string);
+            } else {
+                logs = await auditRepo.findAll();
+            }
+
+            // Pagination
+            const startIndex = (Number(page) - 1) * Number(limit);
+            const endIndex = startIndex + Number(limit);
+            const paginatedLogs = logs.slice(startIndex, endIndex);
+
+            res.json({
+                success: true,
+                data: {
+                    logs: paginatedLogs,
+                    pagination: {
+                        page: Number(page),
+                        limit: Number(limit),
+                        total: logs.length,
+                        totalPages: Math.ceil(logs.length / Number(limit)),
+                    },
+                    filters: {
+                        entityType,
+                        entityId,
+                        userId,
+                        startDate,
+                        endDate,
+                    },
+                },
+                message: "Audit logs retrieved successfully",
+            });
+        } catch (error) {
+            logger.error("Audit logs error:", error);
+            throw error;
+        }
+    })
+);
+
+// Export application data (super admin only)
+router.get(
+    "/export/applications",
+    authenticateAdmin,
+    asyncHandler(async (req, res) => {
+        // Check if user is super admin
+        if (req.user.role !== "super_admin") {
+            return res.status(403).json({
+                success: false,
+                message: "Super admin privileges required",
+            });
+        }
+
+        const { format = "json", startDate, endDate, status } = req.query;
+
+        try {
+            const db = await getDatabase();
+            const applicationRepo = db.getMedicalApplicationRepository();
+
+            let applications = await applicationRepo.findAll();
+
+            // Apply filters
+            if (status) {
+                applications = applications.filter(
+                    (app) => app.status === status
+                );
+            }
+
+            if (startDate && endDate) {
+                const start = new Date(startDate as string);
+                const end = new Date(endDate as string);
+                applications = applications.filter(
+                    (app) => app.submittedAt >= start && app.submittedAt <= end
+                );
+            }
+
+            // Create audit log
+            const auditData: CreateAuditLogData = {
+                entityType: "application",
+                entityId: "export",
+                action: "view",
+                userId: req.user.userId,
+                userEmail: req.user.email,
+                changes: {
+                    exportType: "applications",
+                    format,
+                    recordsCount: applications.length,
+                    filters: { status, startDate, endDate },
+                },
+                ipAddress: req.ip,
+                userAgent: req.get("User-Agent"),
+            };
+            await db.getAuditLogRepository().create(auditData);
+
+            logger.info("Application data exported", {
+                userId: req.user.userId,
+                format,
+                recordsCount: applications.length,
+            });
+
+            if (format === "csv") {
+                // Convert to CSV format
+                const csvHeaders =
+                    "Application Number,Status,Employee Name,Employee ID,Department,Submitted Date,Total Claimed,Total Passed";
+                const csvRows = applications.map(
+                    (app) =>
+                        `"${app.applicationNumber}","${app.status}","${app.employeeName}","${app.employeeId}","${app.department}","${app.submittedAt}","${app.totalAmountClaimed}","${app.totalAmountPassed}"`
+                );
+                const csvContent = [csvHeaders, ...csvRows].join("\n");
+
+                res.setHeader("Content-Type", "text/csv");
+                res.setHeader(
+                    "Content-Disposition",
+                    `attachment; filename="applications-${
+                        new Date().toISOString().split("T")[0]
+                    }.csv"`
+                );
+                res.send(csvContent);
+            } else {
+                // Return JSON format
+                res.json({
+                    success: true,
+                    data: {
+                        applications,
+                        meta: {
+                            totalRecords: applications.length,
+                            exportedAt: new Date().toISOString(),
+                            filters: { status, startDate, endDate },
+                        },
+                    },
+                    message: "Application data exported successfully",
+                });
+            }
+        } catch (error) {
+            logger.error("Export applications error:", error);
+            throw error;
+        }
+    })
+);
 
 export default router;

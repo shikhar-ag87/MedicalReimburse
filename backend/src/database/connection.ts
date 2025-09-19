@@ -1,4 +1,25 @@
-import { DatabaseConfig, DatabaseConnection } from "@/types/database";
+import {
+    DatabaseConfig,
+    DatabaseConnection,
+    MedicalApplication,
+    CreateMedicalApplicationData,
+    UpdateMedicalApplicationData,
+    User,
+    CreateUserData,
+    UpdateUserData,
+    ExpenseItem,
+    CreateExpenseItemData,
+    UpdateExpenseItemData,
+    ApplicationDocument,
+    CreateApplicationDocumentData,
+    AuditLog,
+    CreateAuditLogData,
+    MedicalApplicationRepository,
+    UserRepository,
+    ExpenseItemRepository,
+    ApplicationDocumentRepository,
+    AuditLogRepository,
+} from "@/types/database";
 import { SupabaseConnection } from "./providers/supabase";
 import { PostgreSQLConnection } from "./providers/postgresql";
 import { logger } from "@/utils/logger";
@@ -166,6 +187,26 @@ class MockDatabaseConnection implements DatabaseConnection {
         logger.debug("Mock transaction executed");
         return callback(this);
     }
+
+    getMedicalApplicationRepository() {
+        return new MockMedicalApplicationRepository();
+    }
+
+    getExpenseItemRepository() {
+        return new MockExpenseItemRepository();
+    }
+
+    getApplicationDocumentRepository() {
+        return new MockApplicationDocumentRepository();
+    }
+
+    getUserRepository() {
+        return new MockUserRepository();
+    }
+
+    getAuditLogRepository() {
+        return new MockAuditLogRepository();
+    }
 }
 
 /**
@@ -176,5 +217,329 @@ export async function disconnectDatabase(): Promise<void> {
         await dbConnection.disconnect();
         dbConnection = null;
         logger.info("Disconnected from database");
+    }
+}
+
+// Mock repository implementations for development
+class MockMedicalApplicationRepository implements MedicalApplicationRepository {
+    async create(
+        data: CreateMedicalApplicationData
+    ): Promise<MedicalApplication> {
+        const mockApp: MedicalApplication = {
+            id: `app-${Date.now()}`,
+            applicationNumber: `MR-${new Date().getFullYear()}-${Math.floor(
+                Math.random() * 10000
+            )
+                .toString()
+                .padStart(4, "0")}`,
+            submittedAt: new Date(),
+            updatedAt: new Date(),
+            ...data,
+        };
+        logger.debug("Mock application created:", mockApp.id);
+        return mockApp;
+    }
+
+    async findById(id: string): Promise<MedicalApplication | null> {
+        logger.debug("Mock findById called:", id);
+        return null;
+    }
+
+    async findAll(): Promise<MedicalApplication[]> {
+        logger.debug("Mock findAll called");
+        return [];
+    }
+
+    async update(
+        id: string,
+        data: Partial<UpdateMedicalApplicationData>
+    ): Promise<MedicalApplication | null> {
+        logger.debug("Mock update called:", id, data);
+        return null;
+    }
+
+    async delete(id: string): Promise<boolean> {
+        logger.debug("Mock delete called:", id);
+        return true;
+    }
+
+    async count(): Promise<number> {
+        return 0;
+    }
+
+    async findByEmployeeId(employeeId: string): Promise<MedicalApplication[]> {
+        logger.debug("Mock findByEmployeeId called:", employeeId);
+        return [];
+    }
+
+    async findByStatus(
+        status: MedicalApplication["status"]
+    ): Promise<MedicalApplication[]> {
+        logger.debug("Mock findByStatus called:", status);
+        return [];
+    }
+
+    async findByApplicationNumber(
+        applicationNumber: string
+    ): Promise<MedicalApplication | null> {
+        logger.debug("Mock findByApplicationNumber called:", applicationNumber);
+        return null;
+    }
+
+    async updateStatus(
+        id: string,
+        status: MedicalApplication["status"],
+        reviewerId?: string,
+        comments?: string
+    ): Promise<MedicalApplication | null> {
+        logger.debug(
+            "Mock updateStatus called:",
+            id,
+            status,
+            reviewerId,
+            comments
+        );
+        return null;
+    }
+
+    async getApplicationsForReview(): Promise<MedicalApplication[]> {
+        logger.debug("Mock getApplicationsForReview called");
+        return [];
+    }
+
+    async getApplicationStats(): Promise<{
+        total: number;
+        pending: number;
+        approved: number;
+        rejected: number;
+        completed: number;
+    }> {
+        logger.debug("Mock getApplicationStats called");
+        return { total: 0, pending: 0, approved: 0, rejected: 0, completed: 0 };
+    }
+}
+
+class MockUserRepository implements UserRepository {
+    async create(data: CreateUserData): Promise<User> {
+        const mockUser: User = {
+            id: `user-${Date.now()}`,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            lastLogin: new Date(),
+            ...data,
+        };
+        logger.debug("Mock user created:", mockUser.id);
+        return mockUser;
+    }
+
+    async findById(id: string): Promise<User | null> {
+        logger.debug("Mock user findById called:", id);
+        return null;
+    }
+
+    async findAll(): Promise<User[]> {
+        return [];
+    }
+
+    async update(
+        id: string,
+        data: Partial<UpdateUserData>
+    ): Promise<User | null> {
+        logger.debug("Mock user update called:", id);
+        return null;
+    }
+
+    async delete(id: string): Promise<boolean> {
+        logger.debug("Mock user delete called:", id);
+        return true;
+    }
+
+    async count(): Promise<number> {
+        return 0;
+    }
+
+    async findByEmail(email: string): Promise<User | null> {
+        logger.debug("Mock findByEmail called:", email);
+        return null;
+    }
+
+    async findByEmployeeId(employeeId: string): Promise<User | null> {
+        logger.debug("Mock findByEmployeeId called:", employeeId);
+        return null;
+    }
+
+    async findByRole(role: User["role"]): Promise<User[]> {
+        logger.debug("Mock findByRole called:", role);
+        return [];
+    }
+
+    async updateLastLogin(id: string): Promise<void> {
+        logger.debug("Mock updateLastLogin called:", id);
+    }
+
+    async deactivateUser(id: string): Promise<boolean> {
+        logger.debug("Mock deactivateUser called:", id);
+        return true;
+    }
+}
+
+class MockExpenseItemRepository implements ExpenseItemRepository {
+    async create(data: CreateExpenseItemData): Promise<ExpenseItem> {
+        const mockExpense: ExpenseItem = {
+            id: `expense-${Date.now()}`,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            ...data,
+        };
+        logger.debug("Mock expense created:", mockExpense.id);
+        return mockExpense;
+    }
+
+    async findById(id: string): Promise<ExpenseItem | null> {
+        return null;
+    }
+
+    async findAll(): Promise<ExpenseItem[]> {
+        return [];
+    }
+
+    async update(
+        id: string,
+        data: Partial<UpdateExpenseItemData>
+    ): Promise<ExpenseItem | null> {
+        return null;
+    }
+
+    async delete(id: string): Promise<boolean> {
+        return true;
+    }
+
+    async count(): Promise<number> {
+        return 0;
+    }
+
+    async findByApplicationId(applicationId: string): Promise<ExpenseItem[]> {
+        logger.debug("Mock findByApplicationId called:", applicationId);
+        return [];
+    }
+
+    async getTotalAmountByApplication(
+        applicationId: string
+    ): Promise<{ claimed: number; passed: number }> {
+        logger.debug("Mock getTotalAmountByApplication called:", applicationId);
+        return { claimed: 0, passed: 0 };
+    }
+}
+
+class MockApplicationDocumentRepository
+    implements ApplicationDocumentRepository
+{
+    async create(
+        data: CreateApplicationDocumentData
+    ): Promise<ApplicationDocument> {
+        const mockDoc: ApplicationDocument = {
+            id: `doc-${Date.now()}`,
+            uploadedAt: new Date(),
+            ...data,
+        };
+        logger.debug("Mock document created:", mockDoc.id);
+        return mockDoc;
+    }
+
+    async findById(id: string): Promise<ApplicationDocument | null> {
+        logger.debug("Mock document findById called:", id);
+        return null;
+    }
+
+    async findAll(): Promise<ApplicationDocument[]> {
+        return [];
+    }
+
+    async update(
+        id: string,
+        data: Partial<ApplicationDocument>
+    ): Promise<ApplicationDocument | null> {
+        return null;
+    }
+
+    async delete(id: string): Promise<boolean> {
+        logger.debug("Mock document delete called:", id);
+        return true;
+    }
+
+    async count(): Promise<number> {
+        return 0;
+    }
+
+    async findByApplicationId(
+        applicationId: string
+    ): Promise<ApplicationDocument[]> {
+        logger.debug("Mock findByApplicationId called:", applicationId);
+        return [];
+    }
+
+    async findByDocumentType(
+        applicationId: string,
+        documentType: ApplicationDocument["documentType"]
+    ): Promise<ApplicationDocument[]> {
+        logger.debug(
+            "Mock findByDocumentType called:",
+            applicationId,
+            documentType
+        );
+        return [];
+    }
+}
+
+class MockAuditLogRepository implements AuditLogRepository {
+    async create(data: CreateAuditLogData): Promise<AuditLog> {
+        const mockAudit: AuditLog = {
+            id: `audit-${Date.now()}`,
+            timestamp: new Date(),
+            ...data,
+        };
+        logger.debug("Mock audit log created:", mockAudit.id);
+        return mockAudit;
+    }
+
+    async findById(id: string): Promise<AuditLog | null> {
+        return null;
+    }
+
+    async findAll(): Promise<AuditLog[]> {
+        return [];
+    }
+
+    async update(
+        id: string,
+        data: Partial<AuditLog>
+    ): Promise<AuditLog | null> {
+        return null;
+    }
+
+    async delete(id: string): Promise<boolean> {
+        return true;
+    }
+
+    async count(): Promise<number> {
+        return 0;
+    }
+
+    async findByEntityId(
+        entityType: AuditLog["entityType"],
+        entityId: string
+    ): Promise<AuditLog[]> {
+        logger.debug("Mock findByEntityId called:", entityType, entityId);
+        return [];
+    }
+
+    async findByUserId(userId: string): Promise<AuditLog[]> {
+        logger.debug("Mock findByUserId called:", userId);
+        return [];
+    }
+
+    async findByDateRange(startDate: Date, endDate: Date): Promise<AuditLog[]> {
+        logger.debug("Mock findByDateRange called:", startDate, endDate);
+        return [];
     }
 }
