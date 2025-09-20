@@ -1,5 +1,13 @@
-import { DatabaseConnection, DatabaseConfig } from "@/types/database";
-import { logger } from "@/utils/logger";
+import {
+    DatabaseConnection,
+    DatabaseConfig,
+    MedicalApplicationRepository,
+    ExpenseItemRepository,
+    ApplicationDocumentRepository,
+    UserRepository,
+    AuditLogRepository,
+} from "../../types/database";
+import { logger } from "../../utils/logger";
 
 // Placeholder for PostgreSQL connection
 // This would use pg or pg-pool in a real implementation
@@ -39,6 +47,35 @@ export class PostgreSQLConnection implements DatabaseConnection {
         return this.connected;
     }
 
+    // Repository methods - placeholder implementations
+    getMedicalApplicationRepository(): MedicalApplicationRepository {
+        throw new Error(
+            "MedicalApplicationRepository not yet implemented for PostgreSQL"
+        );
+    }
+
+    getExpenseItemRepository(): ExpenseItemRepository {
+        throw new Error(
+            "ExpenseItemRepository not yet implemented for PostgreSQL"
+        );
+    }
+
+    getApplicationDocumentRepository(): ApplicationDocumentRepository {
+        throw new Error(
+            "ApplicationDocumentRepository not yet implemented for PostgreSQL"
+        );
+    }
+
+    getUserRepository(): UserRepository {
+        throw new Error("UserRepository not yet implemented for PostgreSQL");
+    }
+
+    getAuditLogRepository(): AuditLogRepository {
+        throw new Error(
+            "AuditLogRepository not yet implemented for PostgreSQL"
+        );
+    }
+
     async query<T = any>(sql: string, params?: any[]): Promise<T[]> {
         if (!this.connected) {
             throw new Error("Database not connected");
@@ -51,7 +88,7 @@ export class PostgreSQLConnection implements DatabaseConnection {
 
     async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
         const results = await this.query<T>(sql, params);
-        return results.length > 0 ? results[0] : null;
+        return results.length > 0 ? results[0] ?? null : null;
     }
 
     async transaction<T>(callback: (client: any) => Promise<T>): Promise<T> {

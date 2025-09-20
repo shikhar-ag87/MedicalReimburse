@@ -2,7 +2,7 @@
 // This allows easy swapping between different database providers
 
 export interface DatabaseConfig {
-    type: "supabase" | "postgresql" | "mysql" | "mongodb";
+    type: "supabase" | "postgresql" | "mysql" | "mongodb" | "mock";
     connectionString?: string;
     host?: string;
     port?: number;

@@ -1,25 +1,30 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { asyncHandler } from "@/middleware/errorHandler";
-import { getDatabase } from "@/database/connection";
-import { logger } from "@/utils/logger";
+import { asyncHandler } from "../middleware/errorHandler";
+import { getDatabase } from "../database/connection";
+import { logger } from "../utils/logger";
 import {
     CreateMedicalApplicationData,
     CreateExpenseItemData,
     CreateAuditLogData,
-} from "@/types/database";
+} from "../types/database";
 
 const router = express.Router();
 
 // Authentication middleware
-const authenticateToken = (req: any, res: any, next: any) => {
+const authenticateToken = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void => {
     const token = req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Access token required",
         });
+        return;
     }
 
     try {
@@ -27,13 +32,14 @@ const authenticateToken = (req: any, res: any, next: any) => {
             token,
             process.env.JWT_SECRET || "your-secret-key"
         ) as any;
-        req.user = decoded;
+        (req as any).user = decoded;
         next();
     } catch (error) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Invalid or expired token",
         });
+        return;
     }
 };
 
@@ -46,12 +52,160 @@ const generateApplicationNumber = () => {
     return `MR-${year}-${randomNum}`;
 };
 
+/**
+ * @swagger
+ * /api/applications:
+ *   post:
+ *     summary: Submit new medical reimbursement application
+ *     description: Create a new medical reimbursement application with patient details, treatment information, and expense items
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - employeeName
+ *               - employeeId
+ *               - designation
+ *               - department
+ *               - cghsCardNumber
+ *               - cghsDispensary
+ *               - cardValidity
+ *               - wardEntitlement
+ *               - patientName
+ *               - relationship
+ *               - patientAge
+ *               - gender
+ *               - dateOfTreatment
+ *               - hospitalName
+ *               - hospitalLocation
+ *               - treatmentType
+ *               - treatmentDescription
+ *               - totalAmount
+ *               - expenses
+ *             properties:
+ *               employeeName:
+ *                 type: string
+ *                 description: Name of the employee
+ *               employeeId:
+ *                 type: string
+ *                 description: Employee ID
+ *               designation:
+ *                 type: string
+ *                 description: Employee designation
+ *               department:
+ *                 type: string
+ *                 description: Employee department
+ *               cghsCardNumber:
+ *                 type: string
+ *                 description: CGHS card number
+ *               cghsDispensary:
+ *                 type: string
+ *                 description: CGHS dispensary
+ *               cardValidity:
+ *                 type: string
+ *                 format: date
+ *                 description: CGHS card validity date
+ *               wardEntitlement:
+ *                 type: string
+ *                 description: Ward entitlement
+ *               patientName:
+ *                 type: string
+ *                 description: Name of the patient
+ *               relationship:
+ *                 type: string
+ *                 description: Relationship to employee
+ *               patientAge:
+ *                 type: integer
+ *                 description: Age of the patient
+ *               gender:
+ *                 type: string
+ *                 enum: [male, female, other]
+ *                 description: Patient gender
+ *               dateOfTreatment:
+ *                 type: string
+ *                 format: date
+ *                 description: Date of treatment
+ *               hospitalName:
+ *                 type: string
+ *                 description: Name of the hospital
+ *               hospitalLocation:
+ *                 type: string
+ *                 description: Hospital location
+ *               treatmentType:
+ *                 type: string
+ *                 description: Type of treatment
+ *               treatmentDescription:
+ *                 type: string
+ *                 description: Description of treatment
+ *               totalAmount:
+ *                 type: number
+ *                 format: float
+ *                 description: Total amount claimed
+ *               expenses:
+ *                 type: array
+ *                 description: List of expense items
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     description:
+ *                       type: string
+ *                       description: Expense description
+ *                     amount:
+ *                       type: number
+ *                       format: float
+ *                       description: Expense amount
+ *                     category:
+ *                       type: string
+ *                       description: Expense category
+ *                     receiptNumber:
+ *                       type: string
+ *                       description: Receipt number
+ *     responses:
+ *       201:
+ *         description: Application submitted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Invalid input data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // Submit new medical reimbursement application
 router.post(
     "/",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const formData = req.body;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -65,7 +219,6 @@ router.post(
 
             // Prepare application data
             const applicationPayload: CreateMedicalApplicationData = {
-                applicationNumber: generateApplicationNumber(),
                 status: "pending",
                 employeeName: applicationData.employeeName,
                 employeeId: applicationData.employeeId,
@@ -136,9 +289,18 @@ router.post(
                 userId: userId,
                 userEmail: req.user.email,
                 changes: { status: "pending" },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info(
@@ -167,11 +329,92 @@ router.post(
     })
 );
 
+/**
+ * @swagger
+ * /api/applications:
+ *   get:
+ *     summary: Get all applications for current user
+ *     description: Retrieve a paginated list of medical reimbursement applications for the authenticated user
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, approved, rejected, processing]
+ *         description: Filter applications by status
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Number of applications per page
+ *     responses:
+ *       200:
+ *         description: Applications retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     applications:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Application'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
+ *                         total:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // Get all applications for current user
 router.get(
     "/",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
         const { status, page = 1, limit = 10 } = req.query;
 
@@ -183,10 +426,11 @@ router.get(
             // Get user details
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             let applications;
@@ -245,12 +489,94 @@ router.get(
     })
 );
 
+/**
+ * @swagger
+ * /api/applications/{id}:
+ *   get:
+ *     summary: Get specific application by ID
+ *     description: Retrieve detailed information about a specific medical reimbursement application including expenses and documents
+ *     tags: [Applications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Application ID
+ *     responses:
+ *       200:
+ *         description: Application details retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     application:
+ *                       $ref: '#/components/schemas/Application'
+ *                     expenses:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/ExpenseItem'
+ *                     documents:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Document'
+ *       404:
+ *         description: Application not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden - Cannot access this application
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // Get specific application by ID
 router.get(
     "/:id",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { id } = req.params;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
+        if (!id) {
+            res.status(400).json({
+                success: false,
+                message: "Application ID is required",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -263,19 +589,21 @@ router.get(
             // Get application
             const application = await applicationRepo.findById(id);
             if (!application) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "Application not found",
                 });
+                return;
             }
 
             // Check if user has access to this application
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             const isAdmin = [
@@ -288,10 +616,11 @@ router.get(
                 application.employeeId === user.id;
 
             if (!isAdmin && !isOwner) {
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message: "Access denied",
                 });
+                return;
             }
 
             // Get related data
@@ -318,9 +647,26 @@ router.get(
 router.patch(
     "/:id/status",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { id } = req.params;
         const { status, comments, amountPassed } = req.body;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
+        if (!id) {
+            res.status(400).json({
+                success: false,
+                message: "Application ID is required",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -335,19 +681,21 @@ router.patch(
                 !user ||
                 !["admin", "super_admin", "medical_officer"].includes(user.role)
             ) {
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message: "Access denied. Admin privileges required.",
                 });
+                return;
             }
 
             // Get current application
             const application = await applicationRepo.findById(id);
             if (!application) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "Application not found",
                 });
+                return;
             }
 
             // Update application status
@@ -378,9 +726,18 @@ router.patch(
                     comments,
                     amountPassed,
                 },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info(
@@ -409,8 +766,25 @@ router.patch(
 router.delete(
     "/:id",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { id } = req.params;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
+        if (!id) {
+            res.status(400).json({
+                success: false,
+                message: "Application ID is required",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -422,19 +796,21 @@ router.delete(
             // Get application
             const application = await applicationRepo.findById(id);
             if (!application) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "Application not found",
                 });
+                return;
             }
 
             // Check permissions
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             const isAdmin = ["admin", "super_admin"].includes(user.role);
@@ -444,20 +820,22 @@ router.delete(
             const isPending = application.status === "pending";
 
             if (!isAdmin && !(isOwner && isPending)) {
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message:
                         "Access denied. You can only delete your own pending applications.",
                 });
+                return;
             }
 
             // Delete application
             const deleted = await applicationRepo.delete(id);
             if (!deleted) {
-                return res.status(500).json({
+                res.status(500).json({
                     success: false,
                     message: "Failed to delete application",
                 });
+                return;
             }
 
             // Create audit log
@@ -471,9 +849,18 @@ router.delete(
                     applicationNumber: application.applicationNumber,
                     status: application.status,
                 },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info(
@@ -499,7 +886,15 @@ router.delete(
 router.get(
     "/stats/overview",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -513,10 +908,11 @@ router.get(
                 !user ||
                 !["admin", "super_admin", "medical_officer"].includes(user.role)
             ) {
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message: "Access denied. Admin privileges required.",
                 });
+                return;
             }
 
             // Get application statistics

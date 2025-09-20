@@ -1,11 +1,21 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { DatabaseConnection } from "@/types/database";
-import { logger } from "@/utils/logger";
+import {
+    DatabaseConnection,
+    MedicalApplicationRepository,
+    ExpenseItemRepository,
+    ApplicationDocumentRepository,
+    UserRepository,
+    AuditLogRepository,
+} from "../../types/database";
+import { logger } from "../../utils/logger";
+
+// Import repository implementations
+import { SupabaseMedicalApplicationRepository } from "../repositories/supabase/MedicalApplicationRepository";
 
 export interface SupabaseConfig {
     url: string;
     key: string;
-    serviceKey?: string;
+    serviceKey?: string | undefined;
 }
 
 export class SupabaseConnection implements DatabaseConnection {
@@ -58,6 +68,50 @@ export class SupabaseConnection implements DatabaseConnection {
 
     isConnected(): boolean {
         return this.connected && this.client !== null;
+    }
+
+    // Repository methods
+    getMedicalApplicationRepository(): MedicalApplicationRepository {
+        if (!this.client) {
+            throw new Error("Supabase client not initialized");
+        }
+        return new SupabaseMedicalApplicationRepository(this);
+    }
+
+    getExpenseItemRepository(): ExpenseItemRepository {
+        if (!this.client) {
+            throw new Error("Supabase client not initialized");
+        }
+        // Create a placeholder repository class for now
+        throw new Error(
+            "ExpenseItemRepository not yet implemented for Supabase"
+        );
+    }
+
+    getApplicationDocumentRepository(): ApplicationDocumentRepository {
+        if (!this.client) {
+            throw new Error("Supabase client not initialized");
+        }
+        // Create a placeholder repository class for now
+        throw new Error(
+            "ApplicationDocumentRepository not yet implemented for Supabase"
+        );
+    }
+
+    getUserRepository(): UserRepository {
+        if (!this.client) {
+            throw new Error("Supabase client not initialized");
+        }
+        // Create a placeholder repository class for now
+        throw new Error("UserRepository not yet implemented for Supabase");
+    }
+
+    getAuditLogRepository(): AuditLogRepository {
+        if (!this.client) {
+            throw new Error("Supabase client not initialized");
+        }
+        // Create a placeholder repository class for now
+        throw new Error("AuditLogRepository not yet implemented for Supabase");
     }
 
     getClient(): SupabaseClient {

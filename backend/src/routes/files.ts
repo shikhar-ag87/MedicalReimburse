@@ -1,27 +1,32 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import jwt from "jsonwebtoken";
-import { asyncHandler } from "@/middleware/errorHandler";
-import { getDatabase } from "@/database/connection";
-import { logger } from "@/utils/logger";
+import { asyncHandler } from "../middleware/errorHandler";
+import { getDatabase } from "../database/connection";
+import { logger } from "../utils/logger";
 import {
     CreateApplicationDocumentData,
     CreateAuditLogData,
-} from "@/types/database";
+} from "../types/database";
 
 const router = express.Router();
 
 // Authentication middleware
-const authenticateToken = (req: any, res: any, next: any) => {
+const authenticateToken = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void => {
     const token = req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Access token required",
         });
+        return;
     }
 
     try {
@@ -32,10 +37,11 @@ const authenticateToken = (req: any, res: any, next: any) => {
         req.user = decoded;
         next();
     } catch (error) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Invalid or expired token",
         });
+        return;
     }
 };
 
@@ -115,28 +121,118 @@ const upload = multer({
     },
 });
 
+/**
+ * @swagger
+ * /api/files/upload:
+ *   post:
+ *     summary: Upload files for an application
+ *     description: Upload multiple files (receipts, prescriptions, etc.) for a medical reimbursement application
+ *     tags: [Files]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - applicationId
+ *               - documentType
+ *               - files
+ *             properties:
+ *               applicationId:
+ *                 type: string
+ *                 description: ID of the application to upload files for
+ *               documentType:
+ *                 type: string
+ *                 enum: [prescription, receipt, report, discharge_summary, other]
+ *                 description: Type of document being uploaded
+ *               files:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *                 description: Files to upload (max 10 files, 10MB each)
+ *     responses:
+ *       200:
+ *         description: Files uploaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Files uploaded successfully
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     uploadedFiles:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Document'
+ *       400:
+ *         description: Invalid input data or file validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       413:
+ *         description: File too large
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // File upload endpoint
 router.post(
     "/upload",
     authenticateToken,
     upload.array("files", 10),
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { applicationId, documentType } = req.body;
         const files = req.files as Express.Multer.File[];
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         if (!files || files.length === 0) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "No files uploaded",
             });
+            return;
         }
 
         if (!applicationId) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Application ID is required",
             });
+            return;
         }
 
         try {
@@ -156,19 +252,21 @@ router.post(
                     }
                 });
 
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "Application not found",
                 });
+                return;
             }
 
             // Check user access
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             const isAdmin = [
@@ -188,10 +286,11 @@ router.post(
                     }
                 });
 
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message: "Access denied",
                 });
+                return;
             }
 
             // Save file information to database
@@ -232,9 +331,18 @@ router.post(
                     documentType: documentType,
                     fileNames: files.map((f) => f.originalname),
                 },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info(
@@ -274,8 +382,25 @@ router.post(
 router.get(
     "/:id",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { id } = req.params;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
+        if (!id) {
+            res.status(400).json({
+                success: false,
+                message: "Document ID is required",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -287,10 +412,11 @@ router.get(
             // Get document
             const document = await documentRepo.findById(id);
             if (!document) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "File not found",
                 });
+                return;
             }
 
             // Get associated application
@@ -298,19 +424,21 @@ router.get(
                 document.applicationId
             );
             if (!application) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "Associated application not found",
                 });
+                return;
             }
 
             // Check user access
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             const isAdmin = [
@@ -323,18 +451,20 @@ router.get(
                 application.employeeId === user.id;
 
             if (!isAdmin && !isOwner) {
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message: "Access denied",
                 });
+                return;
             }
 
             // Check if file exists on disk
             if (!fs.existsSync(document.filePath)) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "File not found on disk",
                 });
+                return;
             }
 
             // Set appropriate headers
@@ -365,8 +495,25 @@ router.get(
 router.delete(
     "/:id",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { id } = req.params;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
+        if (!id) {
+            res.status(400).json({
+                success: false,
+                message: "Document ID is required",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -379,10 +526,11 @@ router.delete(
             // Get document
             const document = await documentRepo.findById(id);
             if (!document) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "File not found",
                 });
+                return;
             }
 
             // Get associated application
@@ -390,19 +538,21 @@ router.delete(
                 document.applicationId
             );
             if (!application) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "Associated application not found",
                 });
+                return;
             }
 
             // Check user access
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             const isAdmin = ["admin", "super_admin"].includes(user.role);
@@ -412,11 +562,12 @@ router.delete(
                 application.status === "pending";
 
             if (!isAdmin && !isOwner) {
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message:
                         "Access denied. You can only delete files from your own pending applications.",
                 });
+                return;
             }
 
             // Delete file from disk
@@ -427,10 +578,11 @@ router.delete(
             // Delete from database
             const deleted = await documentRepo.delete(id);
             if (!deleted) {
-                return res.status(500).json({
+                res.status(500).json({
                     success: false,
                     message: "Failed to delete file record",
                 });
+                return;
             }
 
             // Create audit log
@@ -444,9 +596,18 @@ router.delete(
                     fileName: document.originalName,
                     documentType: document.documentType,
                 },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info(`File deleted: ${document.originalName}`, {
@@ -470,10 +631,27 @@ router.delete(
 router.get(
     "/application/:applicationId",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { applicationId } = req.params;
-        const userId = req.user.userId;
         const { documentType } = req.query;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
+        if (!applicationId) {
+            res.status(400).json({
+                success: false,
+                message: "Application ID is required",
+            });
+            return;
+        }
+
+        const userId = req.user.userId;
 
         try {
             const db = await getDatabase();
@@ -484,19 +662,21 @@ router.get(
             // Verify application exists and user has access
             const application = await applicationRepo.findById(applicationId);
             if (!application) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "Application not found",
                 });
+                return;
             }
 
             // Check user access
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             const isAdmin = [
@@ -509,10 +689,11 @@ router.get(
                 application.employeeId === user.id;
 
             if (!isAdmin && !isOwner) {
-                return res.status(403).json({
+                res.status(403).json({
                     success: false,
                     message: "Access denied",
                 });
+                return;
             }
 
             // Get documents
@@ -558,28 +739,31 @@ router.get(
 router.use((error: any, req: any, res: any, next: any) => {
     if (error instanceof multer.MulterError) {
         if (error.code === "LIMIT_FILE_SIZE") {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "File too large. Maximum size is 10MB.",
             });
+            return;
         }
         if (error.code === "LIMIT_FILE_COUNT") {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Too many files. Maximum 10 files allowed.",
             });
+            return;
         }
-        return res.status(400).json({
+        res.status(400).json({
             success: false,
             message: `Upload error: ${error.message}`,
         });
     }
 
     if (error.message.includes("Invalid file type")) {
-        return res.status(400).json({
+        res.status(400).json({
             success: false,
             message: error.message,
         });
+        return;
     }
 
     next(error);

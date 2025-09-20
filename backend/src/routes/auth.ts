@@ -1,26 +1,26 @@
-import express from "express";
+import express, { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { asyncHandler } from "@/middleware/errorHandler";
-import { getDatabase } from "@/database/connection";
-import { logger } from "@/utils/logger";
-import { CreateUserData, User } from "@/types/database";
+import { asyncHandler } from "../middleware/errorHandler";
+import { getDatabase } from "../database/connection";
+import { logger } from "../utils/logger";
+import { CreateUserData, CreateAuditLogData, User } from "../types/database";
 
 const router = express.Router();
 
 // Generate JWT token
-const generateToken = (userId: string, email: string, role: string) => {
+const generateToken = (userId: string, email: string, role: string): string => {
     return jwt.sign(
         { userId, email, role },
         process.env.JWT_SECRET || "your-secret-key",
-        { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
+        { expiresIn: "7d" }
     );
 };
 
 // Register new user
 router.post(
     "/register",
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
         const {
             email,
             password,
@@ -33,17 +33,29 @@ router.post(
 
         // Validation
         if (!email || !password || !name) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Email, password, and name are required",
             });
+            return;
+        }
+
+        // Email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            res.status(400).json({
+                success: false,
+                message: "Invalid email format",
+            });
+            return;
         }
 
         if (password.length < 6) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Password must be at least 6 characters long",
             });
+            return;
         }
 
         try {
@@ -53,10 +65,11 @@ router.post(
             // Check if user already exists
             const existingUser = await userRepo.findByEmail(email);
             if (existingUser) {
-                return res.status(400).json({
+                res.status(409).json({
                     success: false,
                     message: "User with this email already exists",
                 });
+                return;
             }
 
             // Check if employee ID is already in use (if provided)
@@ -65,10 +78,11 @@ router.post(
                     employeeId
                 );
                 if (existingEmployee) {
-                    return res.status(400).json({
+                    res.status(400).json({
                         success: false,
                         message: "Employee ID is already in use",
                     });
+                    return;
                 }
             }
 
@@ -130,15 +144,16 @@ router.post(
 // Login user
 router.post(
     "/login",
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
         const { email, password } = req.body;
 
         // Validation
         if (!email || !password) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Email and password are required",
             });
+            return;
         }
 
         try {
@@ -148,19 +163,21 @@ router.post(
             // Find user by email
             const user = await userRepo.findByEmail(email.toLowerCase());
             if (!user) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Invalid email or password",
                 });
+                return;
             }
 
             // Check if user is active
             if (!user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message:
                         "Account is deactivated. Please contact administrator.",
                 });
+                return;
             }
 
             // Verify password
@@ -169,10 +186,11 @@ router.post(
                 user.password
             );
             if (!isPasswordValid) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Invalid email or password",
                 });
+                return;
             }
 
             // Update last login
@@ -213,15 +231,16 @@ router.post(
 
 // Get current user profile
 router.get(
-    "/me",
-    asyncHandler(async (req, res) => {
+    "/profile",
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
         const token = req.headers.authorization?.replace("Bearer ", "");
 
         if (!token) {
-            return res.status(401).json({
+            res.status(401).json({
                 success: false,
                 message: "Access token required",
             });
+            return;
         }
 
         try {
@@ -237,14 +256,16 @@ router.get(
             // Find user
             const user = await userRepo.findById(decoded.userId);
             if (!user || !user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Invalid or expired token",
                 });
+                return;
             }
 
             res.json({
                 success: true,
+                message: "Profile retrieved successfully",
                 data: {
                     user: {
                         id: user.id,
@@ -261,10 +282,11 @@ router.get(
             });
         } catch (error) {
             if (error instanceof jwt.JsonWebTokenError) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Invalid token",
                 });
+                return;
             }
             logger.error("Get profile error:", error);
             throw error;
@@ -275,7 +297,7 @@ router.get(
 // Logout (mainly for logging purposes, token invalidation handled client-side)
 router.post(
     "/logout",
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
         const token = req.headers.authorization?.replace("Bearer ", "");
 
         if (token) {
@@ -302,29 +324,32 @@ router.post(
 // Change password
 router.post(
     "/change-password",
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response): Promise<void> => {
         const { currentPassword, newPassword } = req.body;
         const token = req.headers.authorization?.replace("Bearer ", "");
 
         if (!token) {
-            return res.status(401).json({
+            res.status(401).json({
                 success: false,
                 message: "Access token required",
             });
+            return;
         }
 
         if (!currentPassword || !newPassword) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Current password and new password are required",
             });
+            return;
         }
 
         if (newPassword.length < 6) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "New password must be at least 6 characters long",
             });
+            return;
         }
 
         try {
@@ -340,10 +365,11 @@ router.post(
             // Find user
             const user = await userRepo.findById(decoded.userId);
             if (!user || !user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Invalid or expired token",
                 });
+                return;
             }
 
             // Verify current password
@@ -352,10 +378,11 @@ router.post(
                 user.password
             );
             if (!isCurrentPasswordValid) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     message: "Current password is incorrect",
                 });
+                return;
             }
 
             // Hash new password
@@ -378,10 +405,11 @@ router.post(
             });
         } catch (error) {
             if (error instanceof jwt.JsonWebTokenError) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Invalid token",
                 });
+                return;
             }
             logger.error("Change password error:", error);
             throw error;

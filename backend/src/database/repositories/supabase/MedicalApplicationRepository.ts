@@ -1,11 +1,11 @@
-import { SupabaseConnection } from "@/database/providers/supabase";
+import { SupabaseConnection } from "../../providers/supabase";
 import {
     MedicalApplication,
     CreateMedicalApplicationData,
     UpdateMedicalApplicationData,
     MedicalApplicationRepository,
-} from "@/types/database";
-import { logger } from "@/utils/logger";
+} from "../../../types/database";
+import { logger } from "../../../utils/logger";
 import { v4 as uuidv4 } from "uuid";
 
 export class SupabaseMedicalApplicationRepository
@@ -136,8 +136,6 @@ export class SupabaseMedicalApplicationRepository
 
         // Map update data to database columns
         if (data.status) updateData.status = data.status;
-        if (data.reviewComments)
-            updateData.review_comments = data.reviewComments;
         if (data.totalAmountPassed !== undefined)
             updateData.total_amount_passed = data.totalAmountPassed;
 
@@ -292,7 +290,7 @@ export class SupabaseMedicalApplicationRepository
     }
 
     private mapFromDatabase(data: any): MedicalApplication {
-        return {
+        const result: MedicalApplication = {
             id: data.id,
             applicationNumber: data.application_number,
             status: data.status,
@@ -314,11 +312,8 @@ export class SupabaseMedicalApplicationRepository
             treatmentType: data.treatment_type,
             clothesProvided: data.clothes_provided,
             priorPermission: data.prior_permission,
-            permissionDetails: data.permission_details,
             emergencyTreatment: data.emergency_treatment,
-            emergencyDetails: data.emergency_details,
             healthInsurance: data.health_insurance,
-            insuranceAmount: data.insurance_amount,
             totalAmountClaimed: parseFloat(data.total_amount_claimed) || 0,
             totalAmountPassed: parseFloat(data.total_amount_passed) || 0,
             bankName: data.bank_name,
@@ -336,15 +331,41 @@ export class SupabaseMedicalApplicationRepository
             facultyEmployeeId: data.faculty_employee_id,
             mobileNumber: data.mobile_number,
             email: data.email,
-            reviewedBy: data.reviewed_by,
-            reviewedAt: data.reviewed_at
-                ? new Date(data.reviewed_at)
-                : undefined,
-            reviewComments: data.review_comments,
-            processedBy: data.processed_by,
-            processedAt: data.processed_at
-                ? new Date(data.processed_at)
-                : undefined,
         };
+
+        // Handle optional fields properly
+        if (data.permission_details) {
+            result.permissionDetails = data.permission_details;
+        }
+
+        if (data.emergency_details) {
+            result.emergencyDetails = data.emergency_details;
+        }
+
+        if (data.insurance_amount) {
+            result.insuranceAmount = data.insurance_amount;
+        }
+
+        if (data.reviewed_by) {
+            result.reviewedBy = data.reviewed_by;
+        }
+
+        if (data.reviewed_at) {
+            result.reviewedAt = new Date(data.reviewed_at);
+        }
+
+        if (data.review_comments) {
+            result.reviewComments = data.review_comments;
+        }
+
+        if (data.processed_by) {
+            result.processedBy = data.processed_by;
+        }
+
+        if (data.processed_at) {
+            result.processedAt = new Date(data.processed_at);
+        }
+
+        return result;
     }
 }

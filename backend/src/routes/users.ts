@@ -1,22 +1,27 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { asyncHandler } from "@/middleware/errorHandler";
-import { getDatabase } from "@/database/connection";
-import { logger } from "@/utils/logger";
-import { CreateAuditLogData } from "@/types/database";
+import { asyncHandler } from "../middleware/errorHandler";
+import { getDatabase } from "../database/connection";
+import { logger } from "../utils/logger";
+import { CreateAuditLogData } from "../types/database";
 
 const router = express.Router();
 
 // Authentication middleware
-const authenticateToken = (req: any, res: any, next: any) => {
+const authenticateToken = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void => {
     const token = req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Access token required",
         });
+        return;
     }
 
     try {
@@ -27,10 +32,11 @@ const authenticateToken = (req: any, res: any, next: any) => {
         req.user = decoded;
         next();
     } catch (error) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Invalid or expired token",
         });
+        return;
     }
 };
 
@@ -38,7 +44,15 @@ const authenticateToken = (req: any, res: any, next: any) => {
 router.get(
     "/profile",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -47,17 +61,19 @@ router.get(
 
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             if (!user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Account is deactivated",
                 });
+                return;
             }
 
             // Return user profile without password
@@ -81,16 +97,25 @@ router.get(
 router.put(
     "/profile",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
         const { name, designation, department, mobileNumber } = req.body;
 
         // Validation
         if (!name || name.trim().length === 0) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Name is required",
             });
+            return;
         }
 
         try {
@@ -101,17 +126,19 @@ router.put(
             // Check if user exists and is active
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             if (!user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Account is deactivated",
                 });
+                return;
             }
 
             // Prepare update data
@@ -132,10 +159,11 @@ router.put(
             const updatedUser = await userRepo.update(userId, cleanUpdateData);
 
             if (!updatedUser) {
-                return res.status(500).json({
+                res.status(500).json({
                     success: false,
                     message: "Failed to update profile",
                 });
+                return;
             }
 
             // Create audit log
@@ -154,9 +182,18 @@ router.put(
                     },
                     newValues: cleanUpdateData,
                 },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info("User profile updated", {
@@ -185,7 +222,15 @@ router.put(
 router.get(
     "/applications",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
         const {
             status,
@@ -203,17 +248,19 @@ router.get(
             // Check if user exists and is active
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             if (!user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Account is deactivated",
                 });
+                return;
             }
 
             // Get user's applications
@@ -232,6 +279,10 @@ router.get(
             applications.sort((a, b) => {
                 const aValue = a[sortBy as keyof typeof a];
                 const bValue = b[sortBy as keyof typeof b];
+
+                if (aValue === undefined && bValue === undefined) return 0;
+                if (aValue === undefined) return 1;
+                if (bValue === undefined) return -1;
 
                 if (sortOrder === "asc") {
                     return aValue > bValue ? 1 : -1;
@@ -308,7 +359,15 @@ router.get(
 router.get(
     "/stats",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
 
         try {
@@ -319,17 +378,19 @@ router.get(
             // Check if user exists and is active
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             if (!user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Account is deactivated",
                 });
+                return;
             }
 
             // Get user's applications
@@ -388,31 +449,42 @@ router.get(
 router.post(
     "/change-password",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
         const { currentPassword, newPassword, confirmPassword } = req.body;
 
         // Validation
         if (!currentPassword || !newPassword || !confirmPassword) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message:
                     "Current password, new password, and confirmation are required",
             });
+            return;
         }
 
         if (newPassword !== confirmPassword) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "New password and confirmation do not match",
             });
+            return;
         }
 
         if (newPassword.length < 6) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "New password must be at least 6 characters long",
             });
+            return;
         }
 
         try {
@@ -423,17 +495,19 @@ router.post(
             // Get user
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             if (!user.isActive) {
-                return res.status(401).json({
+                res.status(401).json({
                     success: false,
                     message: "Account is deactivated",
                 });
+                return;
             }
 
             // Verify current password
@@ -442,10 +516,11 @@ router.post(
                 user.password
             );
             if (!isCurrentPasswordValid) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     message: "Current password is incorrect",
                 });
+                return;
             }
 
             // Hash new password
@@ -466,9 +541,18 @@ router.post(
                 userId: userId,
                 userEmail: user.email,
                 changes: { action: "password_changed" },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info("User password changed", { userId });
@@ -488,15 +572,24 @@ router.post(
 router.delete(
     "/account",
     authenticateToken,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         const userId = req.user.userId;
         const { password } = req.body;
 
         if (!password) {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "Password is required to delete account",
             });
+            return;
         }
 
         try {
@@ -508,10 +601,11 @@ router.delete(
             // Get user
             const user = await userRepo.findById(userId);
             if (!user) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             // Verify password
@@ -520,10 +614,11 @@ router.delete(
                 user.password
             );
             if (!isPasswordValid) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     message: "Incorrect password",
                 });
+                return;
             }
 
             // Check for pending applications
@@ -535,11 +630,12 @@ router.delete(
             );
 
             if (hasPendingApplications) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     message:
                         "Cannot delete account with pending or under review applications. Please wait for them to be processed or cancel them first.",
                 });
+                return;
             }
 
             // Deactivate user instead of actual deletion (for audit purposes)
@@ -553,9 +649,18 @@ router.delete(
                 userId: userId,
                 userEmail: user.email,
                 changes: { action: "account_deactivated_by_user" },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await auditRepo.create(auditData);
 
             logger.info("User account deactivated by user", {

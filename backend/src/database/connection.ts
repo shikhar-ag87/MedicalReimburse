@@ -19,10 +19,10 @@ import {
     ExpenseItemRepository,
     ApplicationDocumentRepository,
     AuditLogRepository,
-} from "@/types/database";
+} from "../types/database";
 import { SupabaseConnection } from "./providers/supabase";
-import { PostgreSQLConnection } from "./providers/postgresql";
-import { logger } from "@/utils/logger";
+// import { PostgreSQLConnection } from "./providers/postgresql";
+import { logger } from "../utils/logger";
 
 /**
  * Database Connection Factory
@@ -37,11 +37,20 @@ export class DatabaseConnectionFactory {
                         "Supabase URL and key are required for Supabase connection"
                     );
                 }
-                return new SupabaseConnection({
+                const supabaseConfig: {
+                    url: string;
+                    key: string;
+                    serviceKey?: string;
+                } = {
                     url: config.supabaseUrl,
                     key: config.supabaseKey,
-                    serviceKey: config.serviceKey,
-                });
+                };
+
+                if (config.serviceKey) {
+                    supabaseConfig.serviceKey = config.serviceKey;
+                }
+
+                return new SupabaseConnection(supabaseConfig);
 
             case "postgresql":
                 if (
@@ -52,13 +61,17 @@ export class DatabaseConnectionFactory {
                         "PostgreSQL connection string or host/database are required"
                     );
                 }
-                return new PostgreSQLConnection(config);
+                // return new PostgreSQLConnection(config);
+                throw new Error("PostgreSQL connection not yet implemented");
 
             case "mysql":
                 throw new Error("MySQL support not yet implemented");
 
             case "mongodb":
                 throw new Error("MongoDB support not yet implemented");
+
+            case "mock":
+                return new MockDatabaseConnection() as any;
 
             default:
                 throw new Error(`Unsupported database type: ${config.type}`);
@@ -88,16 +101,18 @@ export async function connectDatabase(): Promise<DatabaseConnection> {
         return dbConnection;
     }
 
-    const databaseType =
+    const databaseType: DatabaseConfig["type"] =
         (process.env.DATABASE_TYPE as DatabaseConfig["type"]) || "supabase";
 
-    // In development mode, if no database credentials are provided, create a mock connection
+    // In development or test mode, use mock connection
     if (
-        process.env.NODE_ENV === "development" &&
-        (!process.env.SUPABASE_URL ||
-            process.env.SUPABASE_URL === "https://your-project.supabase.co")
+        process.env.NODE_ENV === "development" ||
+        process.env.NODE_ENV === "test" ||
+        databaseType === "mock" ||
+        !process.env.SUPABASE_URL ||
+        process.env.SUPABASE_URL === "https://your-project.supabase.co"
     ) {
-        logger.warn("Using mock database connection for development");
+        logger.warn("Using mock database connection");
         dbConnection = new MockDatabaseConnection();
         await dbConnection.connect();
         return dbConnection;
@@ -107,26 +122,56 @@ export async function connectDatabase(): Promise<DatabaseConnection> {
 
     switch (databaseType) {
         case "supabase":
-            config = {
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_ANON_KEY;
+            const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+
+            if (!supabaseUrl || !supabaseKey) {
+                throw new Error(
+                    "SUPABASE_URL and SUPABASE_ANON_KEY environment variables are required for Supabase connection"
+                );
+            }
+
+            const configObj: DatabaseConfig = {
                 type: "supabase",
-                supabaseUrl: process.env.SUPABASE_URL,
-                supabaseKey: process.env.SUPABASE_ANON_KEY,
-                serviceKey: process.env.SUPABASE_SERVICE_KEY,
+                supabaseUrl,
+                supabaseKey,
             };
+
+            if (serviceKey) {
+                configObj.serviceKey = serviceKey;
+            }
+
+            config = configObj;
             break;
 
         case "postgresql":
-            config = {
+            const pgConnectionString = process.env.DATABASE_URL;
+            const pgHost = process.env.DB_HOST;
+            const pgDatabase = process.env.DB_NAME;
+            const pgUsername = process.env.DB_USER;
+            const pgPassword = process.env.DB_PASSWORD;
+
+            const pgConfigObj: DatabaseConfig = {
                 type: "postgresql",
-                connectionString: process.env.POSTGRES_URL,
-                host: process.env.POSTGRES_HOST,
-                port: parseInt(process.env.POSTGRES_PORT || "5432"),
-                database: process.env.POSTGRES_DB,
-                username: process.env.POSTGRES_USER,
-                password: process.env.POSTGRES_PASSWORD,
-                ssl: process.env.POSTGRES_SSL === "true",
+                port: parseInt(process.env.DB_PORT || "5432"),
+                ssl: process.env.DB_SSL === "true",
             };
+
+            if (pgConnectionString)
+                pgConfigObj.connectionString = pgConnectionString;
+            if (pgHost) pgConfigObj.host = pgHost;
+            if (pgDatabase) pgConfigObj.database = pgDatabase;
+            if (pgUsername) pgConfigObj.username = pgUsername;
+            if (pgPassword) pgConfigObj.password = pgPassword;
+
+            config = pgConfigObj;
             break;
+
+        case "mock":
+            dbConnection = new MockDatabaseConnection();
+            await dbConnection.connect();
+            return dbConnection;
 
         default:
             throw new Error(`Unsupported database type: ${databaseType}`);
@@ -142,7 +187,10 @@ export async function connectDatabase(): Promise<DatabaseConnection> {
         logger.error(`Failed to connect to ${databaseType} database:`, error);
 
         // In development, fall back to mock connection
-        if (process.env.NODE_ENV === "development") {
+        if (
+            process.env.NODE_ENV === "development" ||
+            process.env.NODE_ENV === "test"
+        ) {
             logger.warn(
                 "Falling back to mock database connection for development"
             );
@@ -207,6 +255,13 @@ class MockDatabaseConnection implements DatabaseConnection {
     getAuditLogRepository() {
         return new MockAuditLogRepository();
     }
+}
+
+/**
+ * Clear all mock data (for testing)
+ */
+export function clearMockData(): void {
+    MockUserRepository.clearAll();
 }
 
 /**
@@ -320,6 +375,10 @@ class MockMedicalApplicationRepository implements MedicalApplicationRepository {
 }
 
 class MockUserRepository implements UserRepository {
+    private static users: Map<string, User> = new Map();
+    private static emailIndex: Map<string, string> = new Map(); // email -> userId
+    private static employeeIndex: Map<string, string> = new Map(); // employeeId -> userId
+
     async create(data: CreateUserData): Promise<User> {
         const mockUser: User = {
             id: `user-${Date.now()}`,
@@ -328,17 +387,28 @@ class MockUserRepository implements UserRepository {
             lastLogin: new Date(),
             ...data,
         };
+
+        // Store in memory
+        MockUserRepository.users.set(mockUser.id, mockUser);
+        MockUserRepository.emailIndex.set(mockUser.email, mockUser.id);
+        if (mockUser.employeeId) {
+            MockUserRepository.employeeIndex.set(
+                mockUser.employeeId,
+                mockUser.id
+            );
+        }
+
         logger.debug("Mock user created:", mockUser.id);
         return mockUser;
     }
 
     async findById(id: string): Promise<User | null> {
         logger.debug("Mock user findById called:", id);
-        return null;
+        return MockUserRepository.users.get(id) || null;
     }
 
     async findAll(): Promise<User[]> {
-        return [];
+        return Array.from(MockUserRepository.users.values());
     }
 
     async update(
@@ -346,40 +416,74 @@ class MockUserRepository implements UserRepository {
         data: Partial<UpdateUserData>
     ): Promise<User | null> {
         logger.debug("Mock user update called:", id);
-        return null;
+        const user = MockUserRepository.users.get(id);
+        if (!user) return null;
+
+        const updatedUser = { ...user, ...data, updatedAt: new Date() };
+        MockUserRepository.users.set(id, updatedUser);
+        return updatedUser;
     }
 
     async delete(id: string): Promise<boolean> {
         logger.debug("Mock user delete called:", id);
+        const user = MockUserRepository.users.get(id);
+        if (!user) return false;
+
+        MockUserRepository.users.delete(id);
+        MockUserRepository.emailIndex.delete(user.email);
+        if (user.employeeId) {
+            MockUserRepository.employeeIndex.delete(user.employeeId);
+        }
         return true;
     }
 
     async count(): Promise<number> {
-        return 0;
+        return MockUserRepository.users.size;
     }
 
     async findByEmail(email: string): Promise<User | null> {
         logger.debug("Mock findByEmail called:", email);
-        return null;
+        const userId = MockUserRepository.emailIndex.get(email);
+        return userId ? MockUserRepository.users.get(userId) || null : null;
     }
 
     async findByEmployeeId(employeeId: string): Promise<User | null> {
         logger.debug("Mock findByEmployeeId called:", employeeId);
-        return null;
+        const userId = MockUserRepository.employeeIndex.get(employeeId);
+        return userId ? MockUserRepository.users.get(userId) || null : null;
     }
 
     async findByRole(role: User["role"]): Promise<User[]> {
         logger.debug("Mock findByRole called:", role);
-        return [];
+        return Array.from(MockUserRepository.users.values()).filter(
+            (user) => user.role === role
+        );
     }
 
     async updateLastLogin(id: string): Promise<void> {
         logger.debug("Mock updateLastLogin called:", id);
+        const user = MockUserRepository.users.get(id);
+        if (user) {
+            user.lastLogin = new Date();
+            MockUserRepository.users.set(id, user);
+        }
     }
 
     async deactivateUser(id: string): Promise<boolean> {
         logger.debug("Mock deactivateUser called:", id);
+        const user = MockUserRepository.users.get(id);
+        if (!user) return false;
+
+        user.isActive = false;
+        MockUserRepository.users.set(id, user);
         return true;
+    }
+
+    // Static method to clear all data (for testing)
+    static clearAll(): void {
+        this.users.clear();
+        this.emailIndex.clear();
+        this.employeeIndex.clear();
     }
 }
 

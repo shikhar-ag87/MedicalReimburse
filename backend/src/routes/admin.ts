@@ -1,21 +1,26 @@
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import { asyncHandler } from "@/middleware/errorHandler";
-import { getDatabase } from "@/database/connection";
-import { logger } from "@/utils/logger";
-import { CreateAuditLogData } from "@/types/database";
+import { asyncHandler } from "../middleware/errorHandler";
+import { getDatabase } from "../database/connection";
+import { logger } from "../utils/logger";
+import { CreateAuditLogData } from "../types/database";
 
 const router = express.Router();
 
 // Authentication middleware for admin routes
-const authenticateAdmin = (req: any, res: any, next: any) => {
+const authenticateAdmin = (
+    req: Request,
+    res: Response,
+    next: NextFunction
+): void => {
     const token = req.headers.authorization?.replace("Bearer ", "");
 
     if (!token) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Access token required",
         });
+        return;
     }
 
     try {
@@ -28,19 +33,21 @@ const authenticateAdmin = (req: any, res: any, next: any) => {
         if (
             !["admin", "super_admin", "medical_officer"].includes(decoded.role)
         ) {
-            return res.status(403).json({
+            res.status(403).json({
                 success: false,
                 message: "Admin privileges required",
             });
+            return;
         }
 
         req.user = decoded;
         next();
     } catch (error) {
-        return res.status(401).json({
+        res.status(401).json({
             success: false,
             message: "Invalid or expired token",
         });
+        return;
     }
 };
 
@@ -48,7 +55,7 @@ const authenticateAdmin = (req: any, res: any, next: any) => {
 router.get(
     "/dashboard",
     authenticateAdmin,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         try {
             const db = await getDatabase();
             const applicationRepo = db.getMedicalApplicationRepository();
@@ -121,7 +128,7 @@ router.get(
 router.get(
     "/applications",
     authenticateAdmin,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const {
             status,
             page = 1,
@@ -147,6 +154,10 @@ router.get(
             applications.sort((a, b) => {
                 const aValue = a[sortBy as keyof typeof a];
                 const bValue = b[sortBy as keyof typeof b];
+
+                if (aValue === undefined && bValue === undefined) return 0;
+                if (aValue === undefined) return 1;
+                if (bValue === undefined) return -1;
 
                 if (sortOrder === "asc") {
                     return aValue > bValue ? 1 : -1;
@@ -223,7 +234,7 @@ router.get(
 router.get(
     "/users",
     authenticateAdmin,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { role, page = 1, limit = 20, active } = req.query;
 
         try {
@@ -279,16 +290,34 @@ router.get(
 router.patch(
     "/users/:userId/status",
     authenticateAdmin,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         const { userId } = req.params;
         const { isActive } = req.body;
+
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
+        if (!userId) {
+            res.status(400).json({
+                success: false,
+                message: "User ID is required",
+            });
+            return;
+        }
+
         const adminUserId = req.user.userId;
 
         if (typeof isActive !== "boolean") {
-            return res.status(400).json({
+            res.status(400).json({
                 success: false,
                 message: "isActive must be a boolean value",
             });
+            return;
         }
 
         try {
@@ -299,18 +328,20 @@ router.patch(
             // Check if user exists
             const targetUser = await userRepo.findById(userId);
             if (!targetUser) {
-                return res.status(404).json({
+                res.status(404).json({
                     success: false,
                     message: "User not found",
                 });
+                return;
             }
 
             // Prevent admin from deactivating themselves
             if (userId === adminUserId && !isActive) {
-                return res.status(400).json({
+                res.status(400).json({
                     success: false,
                     message: "You cannot deactivate your own account",
                 });
+                return;
             }
 
             // Update user status
@@ -328,9 +359,17 @@ router.patch(
                     newStatus: isActive,
                     action: isActive ? "activated" : "deactivated",
                 },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
             await auditRepo.create(auditData);
 
             logger.info(
@@ -365,7 +404,7 @@ router.patch(
 router.get(
     "/settings",
     authenticateAdmin,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         try {
             // System information
             const systemSettings = {
@@ -419,13 +458,22 @@ router.get(
 router.get(
     "/audit-logs",
     authenticateAdmin,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         // Check if user is super admin
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         if (req.user.role !== "super_admin") {
-            return res.status(403).json({
+            res.status(403).json({
                 success: false,
                 message: "Super admin privileges required",
             });
+            return;
         }
 
         const {
@@ -496,13 +544,22 @@ router.get(
 router.get(
     "/export/applications",
     authenticateAdmin,
-    asyncHandler(async (req, res) => {
+    asyncHandler(async (req: Request, res: Response) => {
         // Check if user is super admin
+        if (!req.user) {
+            res.status(401).json({
+                success: false,
+                message: "User not authenticated",
+            });
+            return;
+        }
+
         if (req.user.role !== "super_admin") {
-            return res.status(403).json({
+            res.status(403).json({
                 success: false,
                 message: "Super admin privileges required",
             });
+            return;
         }
 
         const { format = "json", startDate, endDate, status } = req.query;
@@ -541,9 +598,18 @@ router.get(
                     recordsCount: applications.length,
                     filters: { status, startDate, endDate },
                 },
-                ipAddress: req.ip,
-                userAgent: req.get("User-Agent"),
             };
+
+            // Add optional properties only if they exist
+            if (req.ip) {
+                auditData.ipAddress = req.ip;
+            }
+
+            const userAgent = req.get("User-Agent");
+            if (userAgent) {
+                auditData.userAgent = userAgent;
+            }
+
             await db.getAuditLogRepository().create(auditData);
 
             logger.info("Application data exported", {
