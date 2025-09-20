@@ -15,12 +15,14 @@ A comprehensive web application for managing medical reimbursement applications 
 ### Backend
 
 -   **Node.js** with Express.js and TypeScript
--   **Modular Database Architecture** (easily swappable)
--   **Supabase** as default database (with PostgreSQL, MySQL support)
--   **JWT Authentication** system
--   **File Upload** with validation
--   **Email Notifications** system
--   **Comprehensive API** with proper error handling
+-   **Modular Database Architecture** with pluggable providers
+-   **Mock Database** for development (no setup required)
+-   **Supabase** support for production (PostgreSQL-based)
+-   **JWT Authentication** with role-based access control
+-   **File Upload** with multer and validation
+-   **API Documentation** with Swagger/OpenAPI
+-   **Comprehensive logging** with Winston
+-   **Rate limiting** and security middleware
 
 ## 🚀 Quick Start
 
@@ -53,19 +55,24 @@ npm install
 ```env
 NODE_ENV=development
 PORT=3001
-DATABASE_TYPE=supabase
+DATABASE_TYPE=mock
 
-# For production, configure your actual Supabase credentials
-SUPABASE_URL=your_supabase_url_here
-SUPABASE_ANON_KEY=your_anon_key_here
-SUPABASE_SERVICE_KEY=your_service_key_here
+# For production with Supabase
+# DATABASE_TYPE=supabase
+# SUPABASE_URL=your_supabase_url_here
+# SUPABASE_ANON_KEY=your_anon_key_here
+# SUPABASE_SERVICE_KEY=your_service_key_here
 
 # JWT Configuration
 JWT_SECRET=your_super_secure_jwt_secret
 JWT_EXPIRES_IN=7d
 
-# CORS
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+# CORS Configuration
+FRONTEND_URL=http://localhost:5173
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
 ```
 
 #### Frontend (.env.local)
@@ -99,7 +106,21 @@ Frontend runs on: http://localhost:5173
 
 -   **Main Application**: http://localhost:5173
 -   **API Health Check**: http://localhost:3001/health
--   **API Documentation**: http://localhost:3001/api
+-   **API Documentation**: http://localhost:3001/api/docs (Swagger UI)
+-   **Manual Testing Guide**: See `MANUAL_TESTING_GUIDE.md` for comprehensive testing instructions
+
+### 5. Verify Installation
+
+```bash
+# Test backend health
+curl http://localhost:3001/health
+
+# Run backend tests
+cd backend && npm test
+
+# Check frontend build
+cd frontend && npm run build
+```
 
 ## 📋 Features Implemented
 
@@ -141,28 +162,57 @@ Frontend runs on: http://localhost:5173
 
 ```
 MedicalReimburse/
-├── frontend/                    # React frontend
+├── frontend/                    # React + TypeScript frontend
 │   ├── src/
 │   │   ├── components/          # Reusable UI components
-│   │   │   └── form/           # Form step components
-│   │   ├── pages/              # Main pages
-│   │   ├── services/           # API integration
-│   │   ├── hooks/              # React hooks
-│   │   ├── types/              # TypeScript definitions
-│   │   └── utils/              # Validation utilities
-│   └── public/                 # Static assets
+│   │   │   ├── form/           # Form step components
+│   │   │   ├── Header.tsx      # Application header
+│   │   │   └── SuccessModal.tsx # Success confirmation modal
+│   │   ├── pages/              # Main application pages
+│   │   │   ├── AdminLogin.tsx
+│   │   │   ├── EmployeeForm.tsx
+│   │   │   ├── HealthCentreDashboard.tsx
+│   │   │   ├── OBCDashboard.tsx
+│   │   │   ├── StatusTracker.tsx
+│   │   │   └── SuperAdminDashboard.tsx
+│   │   ├── contexts/           # React contexts
+│   │   │   └── AuthContext.tsx
+│   │   ├── services/           # API integration services
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── types/              # TypeScript type definitions
+│   │   └── utils/              # Utility functions and validation
+│   ├── public/                 # Static assets
+│   └── dist/                   # Build output
 │
-├── backend/                    # Node.js backend
+├── backend/                    # Node.js + Express + TypeScript API
 │   ├── src/
-│   │   ├── routes/             # API routes
-│   │   ├── database/           # Database abstraction
-│   │   │   ├── providers/      # DB provider implementations
-│   │   │   └── schema/         # Database schemas
+│   │   ├── routes/             # API route handlers
+│   │   │   ├── auth.ts         # Authentication routes
+│   │   │   ├── applications.ts # Medical application routes
+│   │   │   ├── files.ts        # File upload/download routes
+│   │   │   ├── admin.ts        # Admin management routes
+│   │   │   └── users.ts        # User management routes
+│   │   ├── database/           # Database abstraction layer
+│   │   │   ├── connection.ts   # Database connection factory
+│   │   │   ├── providers/      # Database provider implementations
+│   │   │   ├── repositories/   # Data access repositories
+│   │   │   └── schema/         # Database schema definitions
 │   │   ├── middleware/         # Express middleware
-│   │   ├── services/           # Business logic
-│   │   ├── utils/              # Utilities
-│   │   └── types/              # TypeScript definitions
+│   │   │   ├── auth.ts         # Authentication middleware
+│   │   │   └── errorHandler.ts # Error handling middleware
+│   │   ├── config/             # Configuration files
+│   │   │   └── swagger.ts      # API documentation config
+│   │   ├── utils/              # Utility functions and helpers
+│   │   │   └── logger.ts       # Winston logging configuration
+│   │   ├── types/              # TypeScript type definitions
+│   │   ├── app.ts              # Express app configuration
+│   │   └── server.ts           # Server entry point
+│   ├── tests/                  # Test files and fixtures
+│   ├── dist/                   # Compiled JavaScript output
 │   └── logs/                   # Application logs
+│
+├── MANUAL_TESTING_GUIDE.md     # Comprehensive testing guide
+└── README.md                   # Project documentation
 ```
 
 ## 🔧 Development Features
@@ -187,49 +237,74 @@ MedicalReimburse/
 
 ## 📊 API Endpoints
 
-### Applications
-
--   `POST /api/applications` - Submit new application
--   `GET /api/applications` - Get user applications
--   `GET /api/applications/:id` - Get application details
--   `PATCH /api/applications/:id/status` - Update status (admin)
-
-### Authentication
-
+### 🔐 Authentication (`/api/auth`)
+-   `POST /api/auth/register` - Register new user
 -   `POST /api/auth/login` - User login
--   `POST /api/auth/register` - User registration
--   `GET /api/auth/me` - Get current user
+-   `GET /api/auth/profile` - Get current user profile
 -   `POST /api/auth/logout` - User logout
+-   `POST /api/auth/change-password` - Change user password
 
-### File Management
+### 📝 Applications (`/api/applications`)
+-   `POST /api/applications` - Submit new medical application
+-   `GET /api/applications` - Get user's applications (paginated)
+-   `GET /api/applications/:id` - Get specific application details
+-   `PATCH /api/applications/:id/status` - Update application status (admin)
+-   `DELETE /api/applications/:id` - Delete application
+-   `GET /api/applications/stats` - Get application statistics (admin)
 
--   `POST /api/files/upload` - Upload documents
--   `GET /api/files/:id` - Download file
--   `DELETE /api/files/:id` - Delete file
+### 📁 File Management (`/api/files`)
+-   `POST /api/files/upload` - Upload application documents
+-   `GET /api/files/:id` - Download/view uploaded file
+-   `DELETE /api/files/:id` - Delete uploaded file
 
-### Admin
+### 👥 User Management (`/api/users`)
+-   `GET /api/users/profile` - Get current user profile
+-   `PATCH /api/users/profile` - Update user profile
+-   `GET /api/users/:id` - Get specific user details (admin)
 
--   `GET /api/admin/dashboard` - Dashboard statistics
--   `GET /api/admin/applications` - All applications
--   `GET /api/admin/users` - User management
+### 🔧 Admin (`/api/admin`)
+-   `GET /api/admin/dashboard` - Admin dashboard statistics
+-   `GET /api/admin/applications` - Get all applications (admin view)
+-   `PATCH /api/admin/applications/:id/status` - Update application status
+-   `GET /api/admin/users` - Get all users
+-   `GET /api/admin/audit-logs` - Get system audit logs
+-   `GET /api/admin/system-info` - Get system information
+-   `GET /api/admin/export/applications` - Export applications data
+
+### 🏥 System (`/`)
+-   `GET /health` - System health check
+-   `GET /api/docs` - API documentation (Swagger UI)
 
 ## 🔄 Database Support
 
-The system supports multiple databases through a modular architecture:
+The system uses a **modular database architecture** that allows easy switching between providers:
 
 ### Currently Supported
-
--   ✅ **Supabase** (PostgreSQL-based, default)
--   ✅ **PostgreSQL** (direct connection)
+-   ✅ **Mock Database** (in-memory, default for development)
+-   ✅ **Supabase** (PostgreSQL-based, for production)
+-   🔜 **PostgreSQL** (direct connection - planned)
 -   🔜 **MySQL** (planned)
--   🔜 **MongoDB** (planned)
+
+### Development vs Production
+- **Development**: Uses mock database by default (no setup required)
+- **Production**: Switch to Supabase or other providers via environment variables
 
 ### Switching Databases
 
-1. Update `DATABASE_TYPE` in `.env`
-2. Provide connection details
-3. Run migrations if needed
-4. Restart backend server
+1. Update `DATABASE_TYPE` in `.env` file:
+   ```env
+   # For development (default)
+   DATABASE_TYPE=mock
+   
+   # For production with Supabase
+   DATABASE_TYPE=supabase
+   SUPABASE_URL=your_supabase_project_url
+   SUPABASE_ANON_KEY=your_anon_key
+   SUPABASE_SERVICE_KEY=your_service_role_key
+   ```
+
+2. Restart the backend server
+3. Database connection is automatically established
 
 ## 📱 Mobile Support
 
@@ -275,11 +350,37 @@ The system supports multiple databases through a modular architecture:
 
 ## 🧪 Testing & Quality
 
--   TypeScript for type safety
--   ESLint for code quality
--   Consistent code formatting
+### Automated Testing
+-   **Backend**: Comprehensive Jest test suite with 17+ test cases
+-   **API Testing**: Automated endpoint testing with real requests
+-   **Type Safety**: Full TypeScript coverage for both frontend and backend
+-   **Code Quality**: ESLint configuration for consistent code standards
+
+### Manual Testing
+-   **Testing Guide**: Complete step-by-step manual testing guide available
+-   **API Documentation**: Interactive Swagger UI for endpoint testing
+-   **Mock Data**: Pre-seeded test data for immediate testing
+-   **Error Testing**: Comprehensive error scenario coverage
+
+### Running Tests
+```bash
+# Backend tests
+cd backend
+npm test                    # Run all tests
+npm run test:watch         # Watch mode
+npm run test:coverage      # With coverage report
+
+# Frontend linting
+cd frontend  
+npm run lint               # Check code quality
+```
+
+### Quality Assurance
+-   TypeScript for compile-time type checking
+-   ESLint for code quality enforcement
+-   Consistent code formatting standards
 -   Error boundary implementation
--   Comprehensive error handling
+-   Comprehensive error handling and logging
 
 ## 🔧 Troubleshooting
 
@@ -334,14 +435,6 @@ npm start
 3. Update environment variables
 4. Test connection
 
-## 📞 Support
-
-For technical support or questions:
-
--   **Email**: medical@jnu.ac.in
--   **Phone**: 011-26704077
--   **Office Hours**: Mon-Fri, 9:00 AM - 5:00 PM
-
 ## 📄 License
 
 This project is developed for Jawaharlal Nehru University Medical Centre for internal use.
@@ -349,5 +442,5 @@ This project is developed for Jawaharlal Nehru University Medical Centre for int
 ---
 
 **Version**: 1.0.0  
-**Last Updated**: September 2024  
+**Last Updated**: September 2025
 **Status**: ✅ Production Ready

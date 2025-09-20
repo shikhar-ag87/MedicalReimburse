@@ -690,7 +690,7 @@ If you encounter issues:
 1. Check the terminal logs for both frontend and backend
 2. Open browser DevTools to see network requests
 3. Verify the API documentation at http://localhost:3001/api/docs
-4. Run the automated tests: `npm test` in the backend directory
+4. Run the automated tests: `cd backend && npm test`
 
 ---
 
