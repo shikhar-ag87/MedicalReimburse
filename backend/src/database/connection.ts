@@ -168,10 +168,10 @@ export async function connectDatabase(): Promise<DatabaseConnection> {
             config = pgConfigObj;
             break;
 
-        case "mock":
-            dbConnection = new MockDatabaseConnection();
-            await dbConnection.connect();
-            return dbConnection;
+        // case "mock":
+        //     dbConnection = new MockDatabaseConnection();
+        //     await dbConnection.connect();
+        //     return dbConnection;
 
         default:
             throw new Error(`Unsupported database type: ${databaseType}`);

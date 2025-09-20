@@ -51,46 +51,103 @@ export class MockDataGenerator {
      * Generate mock application data
      */
     static generateApplication(
-        userId: string,
         overrides: Partial<CreateApplicationData> = {}
     ): CreateApplicationData {
         const treatmentDate = faker.date.recent({ days: 30 });
 
         return {
-            userId,
+            status: faker.helpers.arrayElement([
+                "pending",
+                "under_review",
+                "approved",
+                "rejected",
+                "completed",
+            ]),
+            // Employee details
+            employeeName: faker.person.fullName(),
+            employeeId: faker.string.alphanumeric(8).toUpperCase(),
+            designation: faker.person.jobTitle(),
+            department: faker.helpers.arrayElement([
+                "Computer Science",
+                "Mathematics",
+                "Physics",
+                "Chemistry",
+                "Biology",
+            ]),
+            cghsCardNumber: faker.string.numeric(10),
+            cghsDispensary: faker.location.city() + " CGHS",
+            cardValidity: faker.date.future(),
+            wardEntitlement: faker.helpers.arrayElement([
+                "General",
+                "Semi-Private",
+                "Private",
+            ]),
+
+            // Patient details
             patientName: faker.person.fullName(),
-            relation: faker.helpers.arrayElement([
+            patientCghsCard: faker.string.numeric(10),
+            relationshipWithEmployee: faker.helpers.arrayElement([
                 "self",
                 "spouse",
                 "child",
                 "parent",
                 "dependent",
             ]),
-            age: faker.number.int({ min: 1, max: 90 }),
-            gender: faker.helpers.arrayElement(["male", "female", "other"]),
+
+            // Treatment details
+            hospitalName: faker.company.name() + " Hospital",
+            hospitalAddress: faker.location.streetAddress(),
             treatmentType: faker.helpers.arrayElement([
-                "outpatient",
+                "opd",
                 "inpatient",
                 "emergency",
-                "specialty",
-                "diagnostic",
-                "preventive",
-                "dental",
-                "eye_care",
-                "maternity",
-                "surgery",
             ]),
-            hospitalName: faker.company.name() + " Hospital",
-            doctorName: "Dr. " + faker.person.fullName(),
-            treatmentDate: treatmentDate.toISOString().split("T")[0],
-            diagnosis: faker.lorem.sentence(),
-            symptoms: faker.lorem.paragraph(),
-            totalAmount: faker.number.float({
+            clothesProvided: faker.datatype.boolean(),
+            priorPermission: faker.datatype.boolean(),
+            ...(faker.datatype.boolean() && {
+                permissionDetails: faker.lorem.sentence(),
+            }),
+            emergencyTreatment: faker.datatype.boolean(),
+            ...(faker.datatype.boolean() && {
+                emergencyDetails: faker.lorem.sentence(),
+            }),
+            healthInsurance: faker.datatype.boolean(),
+            ...(faker.datatype.boolean() && {
+                insuranceAmount: faker.string.numeric(5),
+            }),
+
+            // Financial details
+            totalAmountClaimed: faker.number.float({
                 min: 500,
                 max: 50000,
                 fractionDigits: 2,
             }),
-            expenseItems: this.generateExpenseItems(),
+            totalAmountPassed: faker.number.float({
+                min: 500,
+                max: 50000,
+                fractionDigits: 2,
+            }),
+
+            // Bank details
+            bankName: faker.finance.accountName(),
+            branchAddress: faker.location.streetAddress(),
+            accountNumber: faker.string.numeric(12),
+            ifscCode: faker.string.alphanumeric(11).toUpperCase(),
+
+            // Documents
+            enclosuresCount: faker.number.int({ min: 1, max: 10 }),
+            photocopyCGHSCard: faker.datatype.boolean(),
+            photocopiesOriginalPrescriptions: faker.datatype.boolean(),
+            originalBills: faker.datatype.boolean(),
+
+            // Declaration
+            signature: faker.person.fullName(),
+            declarationPlace: faker.location.city(),
+            declarationDate: faker.date.recent(),
+            facultyEmployeeId: faker.string.alphanumeric(8).toUpperCase(),
+            mobileNumber: faker.phone.number(),
+            email: faker.internet.email(),
+
             ...overrides,
         };
     }
@@ -133,13 +190,13 @@ export class MockDataGenerator {
             password: userData.password, // In real scenarios, this would be hashed
             name: userData.name,
             role: userData.role,
-            employeeId: userData.employeeId,
-            department: userData.department,
-            designation: userData.designation,
+            ...(userData.employeeId && { employeeId: userData.employeeId }),
+            ...(userData.department && { department: userData.department }),
+            ...(userData.designation && { designation: userData.designation }),
             isActive: true,
             createdAt: new Date(faker.date.past()),
             updatedAt: new Date(faker.date.recent()),
-            lastLogin: faker.date.recent(),
+            ...(faker.datatype.boolean() && { lastLogin: faker.date.recent() }),
             ...overrides,
         };
     }
@@ -148,10 +205,9 @@ export class MockDataGenerator {
      * Generate a complete application object
      */
     static generateCompleteApplication(
-        userId: string,
         overrides: Partial<Application> = {}
     ): Application {
-        const appData = this.generateApplication(userId);
+        const appData = this.generateApplication();
         const submittedAt = faker.date.recent({ days: 10 });
 
         return {
@@ -160,48 +216,9 @@ export class MockDataGenerator {
                 "MR" +
                 faker.date.recent().getFullYear() +
                 faker.string.numeric(6),
-            userId,
-            status: faker.helpers.arrayElement([
-                "draft",
-                "submitted",
-                "under_review",
-                "approved",
-                "rejected",
-                "clarification_required",
-            ]),
-            patientName: appData.patientName,
-            relation: appData.relation,
-            age: appData.age,
-            gender: appData.gender,
-            treatmentType: appData.treatmentType,
-            hospitalName: appData.hospitalName,
-            doctorName: appData.doctorName,
-            treatmentDate: appData.treatmentDate,
-            diagnosis: appData.diagnosis,
-            symptoms: appData.symptoms,
-            totalAmount: appData.totalAmount,
-            expenseItems: appData.expenseItems,
-            submittedAt: submittedAt.toISOString(),
-            reviewedAt: faker.datatype.boolean()
-                ? faker.date
-                      .between({ from: submittedAt, to: new Date() })
-                      .toISOString()
-                : undefined,
-            reviewedBy: faker.datatype.boolean()
-                ? faker.string.uuid()
-                : undefined,
-            comments: faker.datatype.boolean()
-                ? faker.lorem.paragraph()
-                : undefined,
-            approvedAmount: faker.datatype.boolean()
-                ? faker.number.float({
-                      min: 500,
-                      max: appData.totalAmount,
-                      fractionDigits: 2,
-                  })
-                : undefined,
-            createdAt: faker.date.past().toISOString(),
-            updatedAt: faker.date.recent().toISOString(),
+            submittedAt: submittedAt,
+            updatedAt: faker.date.recent(),
+            ...appData,
             ...overrides,
         };
     }
@@ -219,12 +236,11 @@ export class MockDataGenerator {
      * Generate multiple applications
      */
     static generateApplications(
-        userId: string,
         count: number,
         overrides: Partial<Application> = {}
     ): Application[] {
         return Array.from({ length: count }, () =>
-            this.generateCompleteApplication(userId, overrides)
+            this.generateCompleteApplication(overrides)
         );
     }
 
@@ -245,8 +261,7 @@ export class MockDataGenerator {
         return this.generateCompleteUser({
             role: "super_admin",
             email: "admin@jnu.ac.in",
-            username: "admin",
-            fullName: "System Administrator",
+            name: "System Administrator",
             ...overrides,
         });
     }
@@ -258,31 +273,28 @@ export class MockDataGenerator {
         return this.generateCompleteUser({
             role: "employee",
             email: "employee@jnu.ac.in",
-            username: "employee",
             ...overrides,
         });
     }
 
     /**
-     * Generate health centre user
+     * Generate health centre user (medical officer)
      */
     static generateHealthCentreUser(overrides: Partial<User> = {}): User {
         return this.generateCompleteUser({
-            role: "health_centre",
+            role: "medical_officer",
             email: "health@jnu.ac.in",
-            username: "health_centre",
             ...overrides,
         });
     }
 
     /**
-     * Generate OBC user
+     * Generate OBC user (admin role)
      */
     static generateOBCUser(overrides: Partial<User> = {}): User {
         return this.generateCompleteUser({
-            role: "obc",
+            role: "admin",
             email: "obc@jnu.ac.in",
-            username: "obc_officer",
             ...overrides,
         });
     }
@@ -296,7 +308,7 @@ export class MockDataGenerator {
         const healthCentreUser = this.generateHealthCentreUser();
         const obcUser = this.generateOBCUser();
 
-        const applications = this.generateApplications(employeeUser.id, 5);
+        const applications = this.generateApplications(5);
 
         return {
             users: {

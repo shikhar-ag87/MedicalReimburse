@@ -275,8 +275,10 @@ router.get(
                         employeeId: user.employeeId,
                         department: user.department,
                         designation: user.designation,
+                        isActive: user.isActive,
                         lastLogin: user.lastLogin,
                         createdAt: user.createdAt,
+                        updatedAt: user.updatedAt,
                     },
                 },
             });
@@ -300,18 +302,24 @@ router.post(
     asyncHandler(async (req: Request, res: Response): Promise<void> => {
         const token = req.headers.authorization?.replace("Bearer ", "");
 
-        if (token) {
-            try {
-                const decoded = jwt.verify(
-                    token,
-                    process.env.JWT_SECRET || "your-secret-key"
-                ) as any;
-                logger.info(`User logged out: ${decoded.email}`, {
-                    userId: decoded.userId,
-                });
-            } catch (error) {
-                // Token may be invalid, but still proceed with logout
-            }
+        if (!token) {
+            res.status(401).json({
+                success: false,
+                message: "Access token required",
+            });
+            return;
+        }
+
+        try {
+            const decoded = jwt.verify(
+                token,
+                process.env.JWT_SECRET || "your-secret-key"
+            ) as any;
+            logger.info(`User logged out: ${decoded.email}`, {
+                userId: decoded.userId,
+            });
+        } catch (error) {
+            // Token may be invalid, but still proceed with logout for valid format
         }
 
         res.json({
