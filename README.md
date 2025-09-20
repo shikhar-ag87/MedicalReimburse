@@ -238,6 +238,7 @@ MedicalReimburse/
 ## 📊 API Endpoints
 
 ### 🔐 Authentication (`/api/auth`)
+
 -   `POST /api/auth/register` - Register new user
 -   `POST /api/auth/login` - User login
 -   `GET /api/auth/profile` - Get current user profile
@@ -245,6 +246,7 @@ MedicalReimburse/
 -   `POST /api/auth/change-password` - Change user password
 
 ### 📝 Applications (`/api/applications`)
+
 -   `POST /api/applications` - Submit new medical application
 -   `GET /api/applications` - Get user's applications (paginated)
 -   `GET /api/applications/:id` - Get specific application details
@@ -253,16 +255,19 @@ MedicalReimburse/
 -   `GET /api/applications/stats` - Get application statistics (admin)
 
 ### 📁 File Management (`/api/files`)
+
 -   `POST /api/files/upload` - Upload application documents
 -   `GET /api/files/:id` - Download/view uploaded file
 -   `DELETE /api/files/:id` - Delete uploaded file
 
 ### 👥 User Management (`/api/users`)
+
 -   `GET /api/users/profile` - Get current user profile
 -   `PATCH /api/users/profile` - Update user profile
 -   `GET /api/users/:id` - Get specific user details (admin)
 
 ### 🔧 Admin (`/api/admin`)
+
 -   `GET /api/admin/dashboard` - Admin dashboard statistics
 -   `GET /api/admin/applications` - Get all applications (admin view)
 -   `PATCH /api/admin/applications/:id/status` - Update application status
@@ -272,6 +277,7 @@ MedicalReimburse/
 -   `GET /api/admin/export/applications` - Export applications data
 
 ### 🏥 System (`/`)
+
 -   `GET /health` - System health check
 -   `GET /api/docs` - API documentation (Swagger UI)
 
@@ -280,28 +286,31 @@ MedicalReimburse/
 The system uses a **modular database architecture** that allows easy switching between providers:
 
 ### Currently Supported
+
 -   ✅ **Mock Database** (in-memory, default for development)
 -   ✅ **Supabase** (PostgreSQL-based, for production)
 -   🔜 **PostgreSQL** (direct connection - planned)
 -   🔜 **MySQL** (planned)
 
 ### Development vs Production
-- **Development**: Uses mock database by default (no setup required)
-- **Production**: Switch to Supabase or other providers via environment variables
+
+-   **Development**: Uses mock database by default (no setup required)
+-   **Production**: Switch to Supabase or other providers via environment variables
 
 ### Switching Databases
 
 1. Update `DATABASE_TYPE` in `.env` file:
-   ```env
-   # For development (default)
-   DATABASE_TYPE=mock
-   
-   # For production with Supabase
-   DATABASE_TYPE=supabase
-   SUPABASE_URL=your_supabase_project_url
-   SUPABASE_ANON_KEY=your_anon_key
-   SUPABASE_SERVICE_KEY=your_service_role_key
-   ```
+
+    ```env
+    # For development (default)
+    DATABASE_TYPE=mock
+
+    # For production with Supabase
+    DATABASE_TYPE=supabase
+    SUPABASE_URL=your_supabase_project_url
+    SUPABASE_ANON_KEY=your_anon_key
+    SUPABASE_SERVICE_KEY=your_service_role_key
+    ```
 
 2. Restart the backend server
 3. Database connection is automatically established
@@ -351,18 +360,21 @@ The system uses a **modular database architecture** that allows easy switching b
 ## 🧪 Testing & Quality
 
 ### Automated Testing
+
 -   **Backend**: Comprehensive Jest test suite with 17+ test cases
 -   **API Testing**: Automated endpoint testing with real requests
 -   **Type Safety**: Full TypeScript coverage for both frontend and backend
 -   **Code Quality**: ESLint configuration for consistent code standards
 
 ### Manual Testing
+
 -   **Testing Guide**: Complete step-by-step manual testing guide available
 -   **API Documentation**: Interactive Swagger UI for endpoint testing
 -   **Mock Data**: Pre-seeded test data for immediate testing
 -   **Error Testing**: Comprehensive error scenario coverage
 
 ### Running Tests
+
 ```bash
 # Backend tests
 cd backend
@@ -371,11 +383,12 @@ npm run test:watch         # Watch mode
 npm run test:coverage      # With coverage report
 
 # Frontend linting
-cd frontend  
+cd frontend
 npm run lint               # Check code quality
 ```
 
 ### Quality Assurance
+
 -   TypeScript for compile-time type checking
 -   ESLint for code quality enforcement
 -   Consistent code formatting standards
