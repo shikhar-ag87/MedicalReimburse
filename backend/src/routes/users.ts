@@ -171,8 +171,6 @@ router.put(
                 entityType: "user",
                 entityId: userId,
                 action: "update",
-                userId: userId,
-                userEmail: user.email,
                 changes: {
                     updatedFields: Object.keys(cleanUpdateData),
                     oldValues: {
@@ -538,8 +536,6 @@ router.post(
                 entityType: "user",
                 entityId: userId,
                 action: "update",
-                userId: userId,
-                userEmail: user.email,
                 changes: { action: "password_changed" },
             };
 
@@ -646,8 +642,6 @@ router.delete(
                 entityType: "user",
                 entityId: userId,
                 action: "delete",
-                userId: userId,
-                userEmail: user.email,
                 changes: { action: "account_deactivated_by_user" },
             };
 

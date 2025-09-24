@@ -1,6 +1,6 @@
 // API Configuration and base utilities
 const API_BASE_URL =
-    import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+    import.meta.env.VITE_API_URL || "http://localhost:3003/api";
 
 export interface ApiResponse<T = any> {
     success: boolean;

@@ -83,6 +83,27 @@ export function createApp(): express.Express {
         });
     });
 
+    // API info endpoint
+    app.get("/api", (req, res) => {
+        res.status(200).json({
+            name: "JNU Medical Reimbursement System API",
+            version: process.env.npm_package_version || "1.0.0",
+            description: "API for managing medical reimbursement applications",
+            environment: process.env.NODE_ENV || "development",
+            endpoints: {
+                health: "/health",
+                documentation: "/api/docs",
+                openapi_spec: "/api/docs.json",
+                auth: "/api/auth",
+                applications: "/api/applications",
+                files: "/api/files",
+                admin: "/api/admin",
+                users: "/api/users",
+            },
+            timestamp: new Date().toISOString(),
+        });
+    });
+
     // API routes
     app.use("/api/auth", authRoutes);
     app.use("/api/applications", applicationRoutes);

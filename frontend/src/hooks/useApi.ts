@@ -86,7 +86,12 @@ export const useServerHealth = (): UseServerHealthResult => {
         setIsChecking(true);
 
         try {
-            const response = await fetch("http://localhost:3001/health", {
+            // Use the same base URL as the API service
+            const API_BASE_URL =
+                import.meta.env.VITE_API_URL || "http://localhost:3003/api";
+            const healthUrl = `${API_BASE_URL.replace("/api", "")}/health`;
+
+            const response = await fetch(healthUrl, {
                 method: "GET",
                 timeout: 5000,
             } as RequestInit);

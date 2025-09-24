@@ -11,7 +11,7 @@ type Application = MedicalApplication;
 
 export class MockDataGenerator {
     /**
-     * Generate mock user data
+     * Generate mock admin user data
      */
     static generateUser(
         overrides: Partial<CreateUserData> = {}
@@ -21,7 +21,6 @@ export class MockDataGenerator {
             password: "TestPassword123!",
             name: faker.person.fullName(),
             role: faker.helpers.arrayElement([
-                "employee",
                 "admin",
                 "super_admin",
                 "medical_officer",
@@ -63,6 +62,9 @@ export class MockDataGenerator {
                 "rejected",
                 "completed",
             ]),
+            applicationNumber: `MR-${new Date().getFullYear()}-${faker.string.numeric(
+                4
+            )}`,
             // Employee details
             employeeName: faker.person.fullName(),
             employeeId: faker.string.alphanumeric(8).toUpperCase(),
@@ -113,7 +115,11 @@ export class MockDataGenerator {
             }),
             healthInsurance: faker.datatype.boolean(),
             ...(faker.datatype.boolean() && {
-                insuranceAmount: faker.string.numeric(5),
+                insuranceAmount: faker.number.float({
+                    min: 1000,
+                    max: 50000,
+                    fractionDigits: 2,
+                }),
             }),
 
             // Financial details
@@ -211,14 +217,10 @@ export class MockDataGenerator {
         const submittedAt = faker.date.recent({ days: 10 });
 
         return {
+            ...appData,
             id: faker.string.uuid(),
-            applicationNumber:
-                "MR" +
-                faker.date.recent().getFullYear() +
-                faker.string.numeric(6),
             submittedAt: submittedAt,
             updatedAt: faker.date.recent(),
-            ...appData,
             ...overrides,
         };
     }
@@ -267,12 +269,12 @@ export class MockDataGenerator {
     }
 
     /**
-     * Generate employee user
+     * Generate regular admin user (for testing admin functionality)
      */
-    static generateEmployeeUser(overrides: Partial<User> = {}): User {
+    static generateRegularAdminUser(overrides: Partial<User> = {}): User {
         return this.generateCompleteUser({
-            role: "employee",
-            email: "employee@jnu.ac.in",
+            role: "admin",
+            email: "admin@jnu.ac.in",
             ...overrides,
         });
     }
@@ -304,7 +306,7 @@ export class MockDataGenerator {
      */
     static generateTestDataset() {
         const adminUser = this.generateAdminUser();
-        const employeeUser = this.generateEmployeeUser();
+        const regularAdminUser = this.generateRegularAdminUser();
         const healthCentreUser = this.generateHealthCentreUser();
         const obcUser = this.generateOBCUser();
 
@@ -313,15 +315,15 @@ export class MockDataGenerator {
         return {
             users: {
                 admin: adminUser,
-                employee: employeeUser,
+                regularAdmin: regularAdminUser,
                 healthCentre: healthCentreUser,
                 obc: obcUser,
             },
             applications,
-            allUsers: [adminUser, employeeUser, healthCentreUser, obcUser],
+            allUsers: [adminUser, regularAdminUser, healthCentreUser, obcUser],
             tokens: {
                 admin: "admin-test-token",
-                employee: "employee-test-token",
+                regularAdmin: "regular-admin-test-token",
                 healthCentre: "health-centre-test-token",
                 obc: "obc-test-token",
             },

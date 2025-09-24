@@ -74,7 +74,7 @@ export interface MedicalApplication {
     emergencyTreatment: boolean;
     emergencyDetails?: string;
     healthInsurance: boolean;
-    insuranceAmount?: string;
+    insuranceAmount?: number;
 
     // Financial details
     totalAmountClaimed: number;
@@ -136,14 +136,13 @@ export interface ApplicationDocument {
         | "medical_certificate"
         | "other";
     uploadedAt: Date;
-    uploadedBy: string;
 }
 
 export interface User {
     id: string;
     email: string;
     password: string;
-    role: "employee" | "admin" | "super_admin" | "medical_officer";
+    role: "admin" | "super_admin" | "medical_officer";
     name: string;
     employeeId?: string;
     department?: string;
@@ -159,8 +158,6 @@ export interface AuditLog {
     entityType: "application" | "user" | "document";
     entityId: string;
     action: "create" | "update" | "delete" | "view" | "approve" | "reject";
-    userId: string;
-    userEmail: string;
     changes?: any;
     ipAddress?: string;
     userAgent?: string;
@@ -172,7 +169,6 @@ export interface CreateMedicalApplicationData
     extends Omit<
         MedicalApplication,
         | "id"
-        | "applicationNumber"
         | "submittedAt"
         | "updatedAt"
         | "reviewedBy"
@@ -187,6 +183,9 @@ export interface CreateExpenseItemData
 
 export interface CreateApplicationDocumentData
     extends Omit<ApplicationDocument, "id" | "uploadedAt"> {}
+
+export interface UpdateApplicationDocumentData
+    extends Partial<Omit<CreateApplicationDocumentData, "applicationId">> {}
 
 export interface CreateUserData
     extends Omit<User, "id" | "lastLogin" | "createdAt" | "updatedAt"> {}
@@ -274,6 +273,5 @@ export interface AuditLogRepository
         entityType: AuditLog["entityType"],
         entityId: string
     ): Promise<AuditLog[]>;
-    findByUserId(userId: string): Promise<AuditLog[]>;
     findByDateRange(startDate: Date, endDate: Date): Promise<AuditLog[]>;
 }

@@ -1,0 +1,49 @@
+{
+  "employeeName": "Dr. John Smith",
+  "employeeId": "EMP001", 
+  "designation": "Professor",
+  "department": "Computer Science",
+  "mobileNumber": "9876543210",
+  "email": "john.smith@jnu.ac.in",
+  "cghsCardNumber": "CGHS123456",
+  "cghsDispensary": "JNU Health Centre",
+  "cardValidity": "2025-12-31",
+  "wardEntitlement": "Ward A",
+  "patientName": "Dr. John Smith", 
+  "patientCghsCard": "CGHS123456",
+  "relationshipWithEmployee": "Self",
+  "hospitalName": "AIIMS Delhi",
+  "hospitalAddress": "Ansari Nagar, New Delhi, Delhi 110029",
+  "treatmentType": "opd",
+  "treatmentPeriodFrom": "2024-09-01",
+  "treatmentPeriodTo": "2024-09-15",
+  "clothesProvided": false,
+  "priorPermission": false,
+  "emergencyTreatment": false,
+  "healthInsurance": false,
+  "bankName": "State Bank of India",
+  "branchAddress": "JNU Campus Branch", 
+  "accountNumber": "1234567890",
+  "ifscCode": "SBIN0001234",
+  "enclosuresCount": 3,
+  "photocopyCGHSCard": true,
+  "photocopiesOriginalPrescriptions": true,
+  "originalBills": true,
+  "signature": "Dr. John Smith",
+  "declarationPlace": "New Delhi",
+  "declarationDate": "2024-09-22",
+  "expenses": [
+    {
+      "billNumber": "BILL001",
+      "billDate": "2024-09-05", 
+      "description": "Consultation and medicines",
+      "amountClaimed": 2500.00
+    },
+    {
+      "billNumber": "BILL002",
+      "billDate": "2024-09-10",
+      "description": "Lab tests", 
+      "amountClaimed": 1500.00
+    }
+  ]
+}

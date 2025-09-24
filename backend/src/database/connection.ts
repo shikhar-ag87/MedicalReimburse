@@ -104,13 +104,14 @@ export async function connectDatabase(): Promise<DatabaseConnection> {
     const databaseType: DatabaseConfig["type"] =
         (process.env.DATABASE_TYPE as DatabaseConfig["type"]) || "supabase";
 
-    // In development or test mode, use mock connection
+    // Use mock connection only if explicitly requested or missing credentials
     if (
-        process.env.NODE_ENV === "development" ||
-        process.env.NODE_ENV === "test" ||
         databaseType === "mock" ||
         !process.env.SUPABASE_URL ||
-        process.env.SUPABASE_URL === "https://your-project.supabase.co"
+        process.env.SUPABASE_URL === "https://your-project.supabase.co" ||
+        !process.env.SUPABASE_ANON_KEY ||
+        process.env.SUPABASE_ANON_KEY === "your_anon_key_here" ||
+        process.env.NODE_ENV === "test"
     ) {
         logger.warn("Using mock database connection");
         dbConnection = new MockDatabaseConnection();
@@ -281,15 +282,10 @@ class MockMedicalApplicationRepository implements MedicalApplicationRepository {
         data: CreateMedicalApplicationData
     ): Promise<MedicalApplication> {
         const mockApp: MedicalApplication = {
+            ...data,
             id: `app-${Date.now()}`,
-            applicationNumber: `MR-${new Date().getFullYear()}-${Math.floor(
-                Math.random() * 10000
-            )
-                .toString()
-                .padStart(4, "0")}`,
             submittedAt: new Date(),
             updatedAt: new Date(),
-            ...data,
         };
         logger.debug("Mock application created:", mockApp.id);
         return mockApp;

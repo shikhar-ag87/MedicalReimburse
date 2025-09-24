@@ -11,6 +11,9 @@ import { logger } from "../../utils/logger";
 
 // Import repository implementations
 import { SupabaseMedicalApplicationRepository } from "../repositories/supabase/MedicalApplicationRepository";
+import { SupabaseExpenseItemRepository } from "../repositories/supabase/ExpenseItemRepository";
+import { SupabaseAuditLogRepository } from "../repositories/supabase/AuditLogRepository";
+import { SupabaseUserRepository } from "../repositories/supabase/UserRepository";
 
 export interface SupabaseConfig {
     url: string;
@@ -38,16 +41,14 @@ export class SupabaseConnection implements DatabaseConnection {
                 );
             }
 
-            // Test connection
+            // Test connection by checking if we can access the admin_users table
             const { data, error } = await this.client
-                .from("_test")
-                .select("*")
+                .from("admin_users")
+                .select("id")
                 .limit(1);
 
-            if (
-                error &&
-                !error.message.includes('relation "_test" does not exist')
-            ) {
+            if (error && error.code !== "PGRST103") {
+                // PGRST103 is "no rows found", which is fine
                 throw error;
             }
 
@@ -82,36 +83,31 @@ export class SupabaseConnection implements DatabaseConnection {
         if (!this.client) {
             throw new Error("Supabase client not initialized");
         }
-        // Create a placeholder repository class for now
-        throw new Error(
-            "ExpenseItemRepository not yet implemented for Supabase"
-        );
+        return new SupabaseExpenseItemRepository(this);
     }
 
     getApplicationDocumentRepository(): ApplicationDocumentRepository {
         if (!this.client) {
             throw new Error("Supabase client not initialized");
         }
-        // Create a placeholder repository class for now
-        throw new Error(
-            "ApplicationDocumentRepository not yet implemented for Supabase"
-        );
+        const {
+            SupabaseApplicationDocumentRepository,
+        } = require("../repositories/supabase/ApplicationDocumentRepository");
+        return new SupabaseApplicationDocumentRepository(this);
     }
 
     getUserRepository(): UserRepository {
         if (!this.client) {
             throw new Error("Supabase client not initialized");
         }
-        // Create a placeholder repository class for now
-        throw new Error("UserRepository not yet implemented for Supabase");
+        return new SupabaseUserRepository(this);
     }
 
     getAuditLogRepository(): AuditLogRepository {
         if (!this.client) {
             throw new Error("Supabase client not initialized");
         }
-        // Create a placeholder repository class for now
-        throw new Error("AuditLogRepository not yet implemented for Supabase");
+        return new SupabaseAuditLogRepository(this);
     }
 
     getClient(): SupabaseClient {

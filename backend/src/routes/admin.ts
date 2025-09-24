@@ -59,17 +59,17 @@ router.get(
         try {
             const db = await getDatabase();
             const applicationRepo = db.getMedicalApplicationRepository();
-            const userRepo = db.getUserRepository();
+            const adminUserRepo = db.getUserRepository(); // This will be admin users now
 
             // Get application statistics
             const applicationStats =
                 await applicationRepo.getApplicationStats();
 
-            // Get user statistics
-            const totalUsers = await userRepo.count();
-            const adminUsers = await userRepo.findByRole("admin");
-            const employeeUsers = await userRepo.findByRole("employee");
-            const medicalOfficers = await userRepo.findByRole(
+            // Get admin user statistics
+            const totalAdmins = await adminUserRepo.count();
+            const adminUsers = await adminUserRepo.findByRole("admin");
+            const superAdmins = await adminUserRepo.findByRole("super_admin");
+            const medicalOfficers = await adminUserRepo.findByRole(
                 "medical_officer"
             );
 
@@ -97,12 +97,12 @@ router.get(
                         )
                         .slice(0, 5),
                 },
-                users: {
-                    total: totalUsers,
+                admins: {
+                    total: totalAdmins,
                     admins: adminUsers.length,
-                    employees: employeeUsers.length,
+                    superAdmins: superAdmins.length,
                     medicalOfficers: medicalOfficers.length,
-                    recentUsers: await userRepo.findAll(), // In production, you'd want to limit this
+                    recentAdmins: await adminUserRepo.findAll(), // Recent admin users
                 },
                 system: {
                     serverUptime: process.uptime(),
@@ -230,7 +230,7 @@ router.get(
     })
 );
 
-// Get all users for admin management
+// Get all admin users for admin management
 router.get(
     "/users",
     authenticateAdmin,
@@ -239,45 +239,51 @@ router.get(
 
         try {
             const db = await getDatabase();
-            const userRepo = db.getUserRepository();
+            const adminUserRepo = db.getUserRepository();
 
-            let users;
+            let adminUsers;
             if (role) {
-                users = await userRepo.findByRole(role as any);
+                adminUsers = await adminUserRepo.findByRole(role as any);
             } else {
-                users = await userRepo.findAll();
+                adminUsers = await adminUserRepo.findAll();
             }
 
             // Filter by active status if specified
             if (active !== undefined) {
                 const isActive = active === "true";
-                users = users.filter((user) => user.isActive === isActive);
+                adminUsers = adminUsers.filter(
+                    (user) => user.isActive === isActive
+                );
             }
 
             // Remove password field for security
-            const safeUsers = users.map(({ password, ...user }) => user);
+            const safeAdminUsers = adminUsers.map(
+                ({ password, ...user }) => user
+            );
 
             // Pagination
             const startIndex = (Number(page) - 1) * Number(limit);
             const endIndex = startIndex + Number(limit);
-            const paginatedUsers = safeUsers.slice(startIndex, endIndex);
+            const paginatedAdmins = safeAdminUsers.slice(startIndex, endIndex);
 
             res.json({
                 success: true,
                 data: {
-                    users: paginatedUsers,
+                    users: paginatedAdmins,
                     pagination: {
                         page: Number(page),
                         limit: Number(limit),
-                        total: users.length,
-                        totalPages: Math.ceil(users.length / Number(limit)),
+                        total: adminUsers.length,
+                        totalPages: Math.ceil(
+                            adminUsers.length / Number(limit)
+                        ),
                     },
                     filters: {
                         role,
                         active,
                     },
                 },
-                message: "Users retrieved successfully",
+                message: "Admin users retrieved successfully",
             });
         } catch (error) {
             logger.error("Admin users error:", error);
@@ -322,15 +328,15 @@ router.patch(
 
         try {
             const db = await getDatabase();
-            const userRepo = db.getUserRepository();
+            const adminUserRepo = db.getUserRepository();
             const auditRepo = db.getAuditLogRepository();
 
-            // Check if user exists
-            const targetUser = await userRepo.findById(userId);
-            if (!targetUser) {
+            // Check if admin user exists
+            const targetAdminUser = await adminUserRepo.findById(userId);
+            if (!targetAdminUser) {
                 res.status(404).json({
                     success: false,
-                    message: "User not found",
+                    message: "Admin user not found",
                 });
                 return;
             }
@@ -344,18 +350,18 @@ router.patch(
                 return;
             }
 
-            // Update user status
-            const updatedUser = await userRepo.update(userId, { isActive });
+            // Update admin user status
+            const updatedAdminUser = await adminUserRepo.update(userId, {
+                isActive,
+            });
 
             // Create audit log
             const auditData: CreateAuditLogData = {
                 entityType: "user",
                 entityId: userId,
                 action: "update",
-                userId: adminUserId,
-                userEmail: req.user.email,
                 changes: {
-                    oldStatus: targetUser.isActive,
+                    oldStatus: targetAdminUser.isActive,
                     newStatus: isActive,
                     action: isActive ? "activated" : "deactivated",
                 },
@@ -373,8 +379,8 @@ router.patch(
             await auditRepo.create(auditData);
 
             logger.info(
-                `User ${isActive ? "activated" : "deactivated"}: ${
-                    targetUser.email
+                `Admin user ${isActive ? "activated" : "deactivated"}: ${
+                    targetAdminUser.email
                 }`,
                 {
                     targetUserId: userId,
@@ -503,7 +509,11 @@ router.get(
                     entityId as string
                 );
             } else if (userId) {
-                logs = await auditRepo.findByUserId(userId as string);
+                // Since findByUserId was removed, get all logs and filter by entityId if it matches a user
+                logs = await auditRepo.findAll({
+                    entityType: "user",
+                    entityId: userId as string,
+                });
             } else {
                 logs = await auditRepo.findAll();
             }
@@ -590,8 +600,6 @@ router.get(
                 entityType: "application",
                 entityId: "export",
                 action: "view",
-                userId: req.user.userId,
-                userEmail: req.user.email,
                 changes: {
                     exportType: "applications",
                     format,

@@ -112,7 +112,7 @@ class FileService {
         try {
             const token = localStorage.getItem("authToken");
             const baseURL =
-                import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+                import.meta.env.VITE_API_URL || "http://localhost:3003/api";
 
             const response = await fetch(`${baseURL}/files/${fileId}`, {
                 headers: {

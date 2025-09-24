@@ -203,21 +203,15 @@ const upload = multer({
 // File upload endpoint
 router.post(
     "/upload",
-    authenticateToken,
     upload.array("files", 10),
     asyncHandler(async (req: Request, res: Response) => {
         const { applicationId, documentType } = req.body;
         const files = req.files as Express.Multer.File[];
 
-        if (!req.user) {
-            res.status(401).json({
-                success: false,
-                message: "User not authenticated",
-            });
-            return;
-        }
-
-        const userId = req.user.userId;
+        // Generate anonymous user ID for file tracking
+        const anonymousUserId = `anonymous-${Date.now()}-${Math.random()
+            .toString(36)
+            .substr(2, 9)}`;
 
         if (!files || files.length === 0) {
             res.status(400).json({
@@ -239,10 +233,9 @@ router.post(
             const db = await getDatabase();
             const documentRepo = db.getApplicationDocumentRepository();
             const applicationRepo = db.getMedicalApplicationRepository();
-            const userRepo = db.getUserRepository();
             const auditRepo = db.getAuditLogRepository();
 
-            // Verify application exists and user has access
+            // Verify application exists
             const application = await applicationRepo.findById(applicationId);
             if (!application) {
                 // Clean up uploaded files
@@ -259,40 +252,6 @@ router.post(
                 return;
             }
 
-            // Check user access
-            const user = await userRepo.findById(userId);
-            if (!user) {
-                res.status(404).json({
-                    success: false,
-                    message: "User not found",
-                });
-                return;
-            }
-
-            const isAdmin = [
-                "admin",
-                "super_admin",
-                "medical_officer",
-            ].includes(user.role);
-            const isOwner =
-                application.employeeId === user.employeeId ||
-                application.employeeId === user.id;
-
-            if (!isAdmin && !isOwner) {
-                // Clean up uploaded files
-                files.forEach((file) => {
-                    if (fs.existsSync(file.path)) {
-                        fs.unlinkSync(file.path);
-                    }
-                });
-
-                res.status(403).json({
-                    success: false,
-                    message: "Access denied",
-                });
-                return;
-            }
-
             // Save file information to database
             const uploadedFiles = [];
             for (const file of files) {
@@ -304,7 +263,6 @@ router.post(
                     fileSize: file.size,
                     filePath: file.path,
                     documentType: documentType || "other",
-                    uploadedBy: userId,
                 };
 
                 const document = await documentRepo.create(documentData);
@@ -324,8 +282,6 @@ router.post(
                 entityType: "document",
                 entityId: applicationId,
                 action: "create",
-                userId: userId,
-                userEmail: user.email,
                 changes: {
                     filesUploaded: files.length,
                     documentType: documentType,
@@ -349,7 +305,7 @@ router.post(
                 `Files uploaded for application: ${application.applicationNumber}`,
                 {
                     applicationId,
-                    userId,
+                    anonymousUserId,
                     filesCount: files.length,
                     fileNames: files.map((f) => f.originalname),
                 }
@@ -378,10 +334,9 @@ router.post(
     })
 );
 
-// Get file by ID (with proper security)
+// Get file by ID (anonymous access)
 router.get(
     "/:id",
-    authenticateToken,
     asyncHandler(async (req: Request, res: Response) => {
         const { id } = req.params;
 
@@ -419,45 +374,6 @@ router.get(
                 return;
             }
 
-            // Get associated application
-            const application = await applicationRepo.findById(
-                document.applicationId
-            );
-            if (!application) {
-                res.status(404).json({
-                    success: false,
-                    message: "Associated application not found",
-                });
-                return;
-            }
-
-            // Check user access
-            const user = await userRepo.findById(userId);
-            if (!user) {
-                res.status(404).json({
-                    success: false,
-                    message: "User not found",
-                });
-                return;
-            }
-
-            const isAdmin = [
-                "admin",
-                "super_admin",
-                "medical_officer",
-            ].includes(user.role);
-            const isOwner =
-                application.employeeId === user.employeeId ||
-                application.employeeId === user.id;
-
-            if (!isAdmin && !isOwner) {
-                res.status(403).json({
-                    success: false,
-                    message: "Access denied",
-                });
-                return;
-            }
-
             // Check if file exists on disk
             if (!fs.existsSync(document.filePath)) {
                 res.status(404).json({
@@ -482,7 +398,6 @@ router.get(
             logger.info(`File downloaded: ${document.originalName}`, {
                 documentId: id,
                 applicationId: document.applicationId,
-                userId,
             });
         } catch (error) {
             logger.error("File download error:", error);
@@ -590,8 +505,6 @@ router.delete(
                 entityType: "document",
                 entityId: document.applicationId,
                 action: "delete",
-                userId: userId,
-                userEmail: user.email,
                 changes: {
                     fileName: document.originalName,
                     documentType: document.documentType,
@@ -628,20 +541,12 @@ router.delete(
 );
 
 // Get files for an application
+// Get files by application ID (anonymous access)
 router.get(
     "/application/:applicationId",
-    authenticateToken,
     asyncHandler(async (req: Request, res: Response) => {
         const { applicationId } = req.params;
         const { documentType } = req.query;
-
-        if (!req.user) {
-            res.status(401).json({
-                success: false,
-                message: "User not authenticated",
-            });
-            return;
-        }
 
         if (!applicationId) {
             res.status(400).json({
@@ -651,50 +556,9 @@ router.get(
             return;
         }
 
-        const userId = req.user.userId;
-
         try {
             const db = await getDatabase();
             const documentRepo = db.getApplicationDocumentRepository();
-            const applicationRepo = db.getMedicalApplicationRepository();
-            const userRepo = db.getUserRepository();
-
-            // Verify application exists and user has access
-            const application = await applicationRepo.findById(applicationId);
-            if (!application) {
-                res.status(404).json({
-                    success: false,
-                    message: "Application not found",
-                });
-                return;
-            }
-
-            // Check user access
-            const user = await userRepo.findById(userId);
-            if (!user) {
-                res.status(404).json({
-                    success: false,
-                    message: "User not found",
-                });
-                return;
-            }
-
-            const isAdmin = [
-                "admin",
-                "super_admin",
-                "medical_officer",
-            ].includes(user.role);
-            const isOwner =
-                application.employeeId === user.employeeId ||
-                application.employeeId === user.id;
-
-            if (!isAdmin && !isOwner) {
-                res.status(403).json({
-                    success: false,
-                    message: "Access denied",
-                });
-                return;
-            }
 
             // Get documents
             let documents;
@@ -718,7 +582,6 @@ router.get(
                 fileSize: doc.fileSize,
                 documentType: doc.documentType,
                 uploadedAt: doc.uploadedAt,
-                uploadedBy: doc.uploadedBy,
             }));
 
             res.json({

@@ -1,0 +1,9 @@
+Medical Bill Document
+===================
+Hospital: AIIMS New Delhi
+Date: 2024-01-15
+Bill Number: B001
+Amount: ₹500
+Description: Consultation Fee
+
+This is a test document for medical reimbursement file upload testing.

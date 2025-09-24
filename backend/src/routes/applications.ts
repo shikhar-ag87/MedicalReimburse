@@ -11,7 +11,7 @@ import {
 
 const router = express.Router();
 
-// Authentication middleware
+// Authentication middleware (for admin routes only)
 const authenticateToken = (
     req: Request,
     res: Response,
@@ -194,19 +194,8 @@ const generateApplicationNumber = () => {
 // Submit new medical reimbursement application
 router.post(
     "/",
-    authenticateToken,
     asyncHandler(async (req: Request, res: Response) => {
         const formData = req.body;
-
-        if (!req.user) {
-            res.status(401).json({
-                success: false,
-                message: "User not authenticated",
-            });
-            return;
-        }
-
-        const userId = req.user.userId;
 
         try {
             const db = await getDatabase();
@@ -219,6 +208,7 @@ router.post(
 
             // Prepare application data
             const applicationPayload: CreateMedicalApplicationData = {
+                applicationNumber: generateApplicationNumber(),
                 status: "pending",
                 employeeName: applicationData.employeeName,
                 employeeId: applicationData.employeeId,
@@ -241,7 +231,12 @@ router.post(
                 emergencyTreatment: applicationData.emergencyTreatment || false,
                 emergencyDetails: applicationData.emergencyDetails,
                 healthInsurance: applicationData.healthInsurance || false,
-                insuranceAmount: applicationData.insuranceAmount,
+                ...(applicationData.insuranceAmount &&
+                    applicationData.insuranceAmount !== "" && {
+                        insuranceAmount: parseFloat(
+                            applicationData.insuranceAmount
+                        ),
+                    }),
                 totalAmountClaimed: applicationData.totalAmountClaimed || 0,
                 totalAmountPassed: 0, // Will be updated by admin
                 bankName: applicationData.bankName,
@@ -286,8 +281,6 @@ router.post(
                 entityType: "application",
                 entityId: newApplication.id,
                 action: "create",
-                userId: userId,
-                userEmail: req.user.email,
                 changes: { status: "pending" },
             };
 
@@ -301,13 +294,13 @@ router.post(
                 auditData.userAgent = userAgent;
             }
 
-            await auditRepo.create(auditData);
+            // Note: Audit logging temporarily disabled for anonymous system
+            // await auditRepo.create(auditData);
 
             logger.info(
                 `New application submitted: ${newApplication.applicationNumber}`,
                 {
                     applicationId: newApplication.id,
-                    userId: userId,
                     totalAmount: applicationData.totalAmountClaimed,
                 }
             );
@@ -402,7 +395,7 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-// Get all applications for current user
+// Get all applications (admin only)
 router.get(
     "/",
     authenticateToken,
@@ -423,40 +416,27 @@ router.get(
             const applicationRepo = db.getMedicalApplicationRepository();
             const userRepo = db.getUserRepository();
 
-            // Get user details
+            // Check if user is admin
             const user = await userRepo.findById(userId);
-            if (!user) {
-                res.status(404).json({
+            if (
+                !user ||
+                !["admin", "super_admin", "medical_officer"].includes(user.role)
+            ) {
+                res.status(403).json({
                     success: false,
-                    message: "User not found",
+                    message: "Access denied. Admin privileges required.",
                 });
                 return;
             }
 
+            // Get all applications (admin can see all)
             let applications;
-            if (
-                user.role === "admin" ||
-                user.role === "super_admin" ||
-                user.role === "medical_officer"
-            ) {
-                // Admin can see all applications
-                if (status) {
-                    applications = await applicationRepo.findByStatus(
-                        status as any
-                    );
-                } else {
-                    applications = await applicationRepo.findAll();
-                }
-            } else {
-                // Regular users can only see their own applications
-                applications = await applicationRepo.findByEmployeeId(
-                    user.employeeId || user.id
+            if (status) {
+                applications = await applicationRepo.findByStatus(
+                    status as any
                 );
-                if (status) {
-                    applications = applications.filter(
-                        (app) => app.status === status
-                    );
-                }
+            } else {
+                applications = await applicationRepo.findAll();
             }
 
             // Simple pagination
@@ -557,17 +537,8 @@ router.get(
 // Get specific application by ID
 router.get(
     "/:id",
-    authenticateToken,
     asyncHandler(async (req: Request, res: Response) => {
         const { id } = req.params;
-
-        if (!req.user) {
-            res.status(401).json({
-                success: false,
-                message: "User not authenticated",
-            });
-            return;
-        }
 
         if (!id) {
             res.status(400).json({
@@ -577,14 +548,11 @@ router.get(
             return;
         }
 
-        const userId = req.user.userId;
-
         try {
             const db = await getDatabase();
             const applicationRepo = db.getMedicalApplicationRepository();
             const expenseRepo = db.getExpenseItemRepository();
             const documentRepo = db.getApplicationDocumentRepository();
-            const userRepo = db.getUserRepository();
 
             // Get application
             const application = await applicationRepo.findById(id);
@@ -592,33 +560,6 @@ router.get(
                 res.status(404).json({
                     success: false,
                     message: "Application not found",
-                });
-                return;
-            }
-
-            // Check if user has access to this application
-            const user = await userRepo.findById(userId);
-            if (!user) {
-                res.status(404).json({
-                    success: false,
-                    message: "User not found",
-                });
-                return;
-            }
-
-            const isAdmin = [
-                "admin",
-                "super_admin",
-                "medical_officer",
-            ].includes(user.role);
-            const isOwner =
-                application.employeeId === user.employeeId ||
-                application.employeeId === user.id;
-
-            if (!isAdmin && !isOwner) {
-                res.status(403).json({
-                    success: false,
-                    message: "Access denied",
                 });
                 return;
             }
@@ -659,6 +600,8 @@ router.patch(
             return;
         }
 
+        const userId = req.user.userId;
+
         if (!id) {
             res.status(400).json({
                 success: false,
@@ -666,8 +609,6 @@ router.patch(
             });
             return;
         }
-
-        const userId = req.user.userId;
 
         try {
             const db = await getDatabase();
@@ -718,8 +659,6 @@ router.patch(
                 entityType: "application",
                 entityId: id,
                 action: "update",
-                userId: userId,
-                userEmail: user.email,
                 changes: {
                     oldStatus: application.status,
                     newStatus: status,
@@ -738,7 +677,8 @@ router.patch(
                 auditData.userAgent = userAgent;
             }
 
-            await auditRepo.create(auditData);
+            // Note: Audit logging temporarily disabled for anonymous system
+            // await auditRepo.create(auditData);
 
             logger.info(
                 `Application status updated: ${application.applicationNumber}`,
@@ -843,8 +783,6 @@ router.delete(
                 entityType: "application",
                 entityId: id,
                 action: "delete",
-                userId: userId,
-                userEmail: user.email,
                 changes: {
                     applicationNumber: application.applicationNumber,
                     status: application.status,
@@ -861,7 +799,8 @@ router.delete(
                 auditData.userAgent = userAgent;
             }
 
-            await auditRepo.create(auditData);
+            // Note: Audit logging temporarily disabled for anonymous system
+            // await auditRepo.create(auditData);
 
             logger.info(
                 `Application deleted: ${application.applicationNumber}`,
