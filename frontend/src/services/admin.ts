@@ -1,6 +1,6 @@
 // Admin service for managing applications and users
 import { apiService } from "./api";
-import type { Application, ApplicationDetails } from "./applications";
+import type { Application } from "./applications";
 import type { User } from "./auth";
 
 export interface DashboardStats {
@@ -127,7 +127,21 @@ class AdminService {
             throw new Error(response.message || "Failed to fetch applications");
         }
 
-        return response.data;
+        // Return data with proper structure and type assertion
+        const data = response.data as any;
+        return {
+            applications: data.applications || [],
+            pagination: data.pagination || {
+                page: 1,
+                limit: 10,
+                total: 0,
+                totalPages: 0,
+            },
+            filters: data.filters || {
+                sortBy: "submittedAt",
+                sortOrder: "desc",
+            },
+        };
     }
 
     /**
@@ -157,7 +171,21 @@ class AdminService {
             throw new Error(response.message || "Failed to fetch users");
         }
 
-        return response.data;
+        // Return data with proper structure and type assertion
+        const data = response.data as any;
+        return {
+            users: data.users || [],
+            pagination: data.pagination || {
+                page: 1,
+                limit: 10,
+                total: 0,
+                totalPages: 0,
+            },
+            filters: data.filters || {
+                role: undefined,
+                active: undefined,
+            },
+        };
     }
 
     /**
@@ -245,7 +273,18 @@ class AdminService {
             throw new Error(response.message || "Failed to fetch audit logs");
         }
 
-        return response.data;
+        // Return data with proper structure and type assertion
+        const data = response.data as any;
+        return {
+            logs: data.logs || [],
+            pagination: data.pagination || {
+                page: 1,
+                limit: 10,
+                total: 0,
+                totalPages: 0,
+            },
+            filters: data.filters || {},
+        };
     }
 
     /**

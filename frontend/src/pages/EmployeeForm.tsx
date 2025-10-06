@@ -11,6 +11,7 @@ import {
     Receipt,
     Upload,
     FileCheck,
+    Download,
 } from "lucide-react";
 import { FormData, ValidationErrors, initialFormData } from "../types/form";
 import { validateStep } from "../utils/validation";
@@ -20,6 +21,7 @@ import {
     useAutoSave,
     useSavedFormData,
 } from "../hooks/useApi";
+import { PDFService } from "../services/pdfService";
 import EmployeeDetailsStep from "../components/form/EmployeeDetailsStep";
 import PatientDetailsStep from "../components/form/PatientDetailsStep";
 import TreatmentDetailsStep from "../components/form/TreatmentDetailsStep";
@@ -105,6 +107,20 @@ const EmployeeForm = () => {
         } catch (error) {
             console.error("Error submitting application:", error);
             // Error is handled by the hook
+        }
+    };
+
+    const handleDownloadPDF = async () => {
+        if (!submissionResult) {
+            alert("No submission data available for PDF generation");
+            return;
+        }
+
+        try {
+            await PDFService.generateApplicationPDF(formData, submissionResult);
+        } catch (error) {
+            console.error("Error generating PDF:", error);
+            alert("Error generating PDF. Please try again.");
         }
     };
 
@@ -241,7 +257,14 @@ const EmployeeForm = () => {
                             Submit New Application
                         </button>
                         <button
-                            className="btn-gov-secondary"
+                            className="btn-gov-secondary flex items-center gap-2"
+                            onClick={handleDownloadPDF}
+                        >
+                            <Download className="w-4 h-4" />
+                            Download PDF
+                        </button>
+                        <button
+                            className="btn-gov-outline"
                             onClick={() => window.print()}
                         >
                             Print Confirmation
