@@ -1,36 +1,50 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Heart, Edit3, Save, ArrowLeft, LogOut } from 'lucide-react';
+import { adminService } from '../services/admin';
+import type { AdminApplication } from '../services/admin';
 
 const HealthCentreDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [claims, setClaims] = useState<any[]>([]);
+  const [claims, setClaims] = useState<AdminApplication[]>([]);
   const [selectedClaim, setSelectedClaim] = useState<any>(null);
   const [editingExpenses, setEditingExpenses] = useState<any[]>([]);
   const [remarks, setRemarks] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'health-centre') {
+    // Wait for auth to load
+    if (authLoading) return;
+
+    if (!user || (user.role !== 'health-centre' && user.role !== 'medical_officer')) {
       navigate('/admin/login');
       return;
     }
 
-    // Mock data - claims forwarded from OBC Cell
-    setClaims([
-      {
-        id: 'JNU1234567891',
-        employeeName: 'Prof. Sunita Sharma',
-        department: 'School of Life Sciences',
-        submissionDate: '2024-01-14',
-        totalAmount: 8500,
-        status: 'pending_health_review',
-        patientName: 'Amit Sharma',
-        relationship: 'Son'
-      }
-    ]);
-  }, [user, navigate]);
+    fetchApplications();
+  }, [user, navigate, authLoading]);
+
+  const fetchApplications = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      // Health centre sees applications that are under review
+      const response = await adminService.getAllApplications({
+        status: 'under_review',
+        sortBy: 'submittedAt',
+        sortOrder: 'desc'
+      });
+      setClaims(response.applications);
+    } catch (error: any) {
+      setError(error.message || 'Failed to fetch applications');
+      console.error('Error fetching applications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleViewClaim = (claim: any) => {
     const claimDetails = {
@@ -344,7 +358,7 @@ const HealthCentreDashboard = () => {
                 <div className="ml-3">
                   <p className="text-sm text-yellow-600">Total Amount</p>
                   <p className="text-xl font-semibold text-yellow-800">
-                    ₹ {claims.reduce((total, claim) => total + claim.totalAmount, 0).toLocaleString()}
+                    ₹ {claims.reduce((total, claim) => total + claim.totalAmountClaimed, 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -367,14 +381,12 @@ const HealthCentreDashboard = () => {
               <tbody className="divide-y divide-gray-200">
                 {claims.map((claim, index) => (
                   <tr key={claim.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-3 text-sm font-mono">{claim.id}</td>
+                    <td className="px-4 py-3 text-sm font-mono">{claim.applicationNumber}</td>
                     <td className="px-4 py-3 text-sm">{claim.employeeName}</td>
                     <td className="px-4 py-3 text-sm">
                       {claim.patientName}
-                      <br />
-                      <span className="text-xs text-gray-500">({claim.relationship})</span>
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium">₹ {claim.totalAmount.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm font-medium">₹ {claim.totalAmountClaimed.toLocaleString()}</td>
                     <td className="px-4 py-3">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
                         Medical Review

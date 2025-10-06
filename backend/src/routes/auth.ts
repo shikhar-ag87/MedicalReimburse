@@ -163,6 +163,7 @@ router.post(
             // Find user by email
             const user = await userRepo.findByEmail(email.toLowerCase());
             if (!user) {
+                logger.debug(`Login failed: User not found for email ${email}`);
                 res.status(401).json({
                     success: false,
                     message: "Invalid email or password",
@@ -170,8 +171,12 @@ router.post(
                 return;
             }
 
+            logger.debug(`User found: ${user.email}, role: ${user.role}, active: ${user.isActive}`);
+            logger.debug(`Password hash from DB: ${user.password ? user.password.substring(0, 20) + '...' : 'NULL'}`);
+
             // Check if user is active
             if (!user.isActive) {
+                logger.debug(`Login failed: User ${email} is not active`);
                 res.status(401).json({
                     success: false,
                     message:
@@ -181,11 +186,15 @@ router.post(
             }
 
             // Verify password
+            logger.debug(`Comparing password for ${email}`);
             const isPasswordValid = await bcrypt.compare(
                 password,
                 user.password
             );
+            logger.debug(`Password valid: ${isPasswordValid}`);
+            
             if (!isPasswordValid) {
+                logger.debug(`Login failed: Invalid password for ${email}`);
                 res.status(401).json({
                     success: false,
                     message: "Invalid email or password",

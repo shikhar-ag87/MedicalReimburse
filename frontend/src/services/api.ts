@@ -26,7 +26,8 @@ class ApiService {
 
     private async request<T>(
         endpoint: string,
-        options: RequestInit = {}
+        options: RequestInit = {},
+        requireAuth: boolean = true
     ): Promise<ApiResponse<T>> {
         const url = `${this.baseURL}${endpoint}`;
 
@@ -35,9 +36,9 @@ class ApiService {
             Accept: "application/json",
         };
 
-        // Add authorization header if token exists
+        // Add authorization header if token exists and auth is required
         const token = localStorage.getItem("authToken");
-        if (token) {
+        if (token && requireAuth) {
             (defaultHeaders as any)["Authorization"] = `Bearer ${token}`;
         }
 
@@ -89,7 +90,8 @@ class ApiService {
     // GET request
     async get<T>(
         endpoint: string,
-        params?: Record<string, any>
+        params?: Record<string, any>,
+        requireAuth: boolean = true
     ): Promise<ApiResponse<T>> {
         let url = endpoint;
         if (params) {
@@ -105,7 +107,15 @@ class ApiService {
             }
         }
 
-        return this.request<T>(url, { method: "GET" });
+        return this.request<T>(url, { method: "GET" }, requireAuth);
+    }
+
+    // Public GET request (no auth required)
+    async getPublic<T>(
+        endpoint: string,
+        params?: Record<string, any>
+    ): Promise<ApiResponse<T>> {
+        return this.get<T>(endpoint, params, false);
     }
 
     // POST request

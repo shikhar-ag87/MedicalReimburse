@@ -869,4 +869,132 @@ router.get(
     })
 );
 
+/**
+ * @swagger
+ * /applications/public/status:
+ *   get:
+ *     summary: Get application status by application number (public endpoint)
+ *     tags: [Applications]
+ *     parameters:
+ *       - in: query
+ *         name: applicationNumber
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Application number to check status
+ *     responses:
+ *       200:
+ *         description: Application status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Application'
+ *       404:
+ *         description: Application not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// Public endpoint to check application status (no authentication required)
+router.get(
+    "/public/status",
+    asyncHandler(async (req: Request, res: Response) => {
+        const { applicationNumber } = req.query;
+
+        if (!applicationNumber || typeof applicationNumber !== "string") {
+            res.status(400).json({
+                success: false,
+                message: "Application number is required",
+            });
+            return;
+        }
+
+        try {
+            const db = await getDatabase();
+            const applicationRepo = db.getMedicalApplicationRepository();
+            const expenseRepo = db.getExpenseItemRepository();
+            const documentRepo = db.getApplicationDocumentRepository();
+
+            // Find application by application number
+            const application = await applicationRepo.findByApplicationNumber(
+                applicationNumber
+            );
+
+            if (!application) {
+                res.status(404).json({
+                    success: false,
+                    message: "Application not found",
+                });
+                return;
+            }
+
+            // Get expenses for this application
+            const expenses = await expenseRepo.findByApplicationId(
+                application.id
+            );
+
+            // Get documents for this application
+            const documents = await documentRepo.findByApplicationId(
+                application.id
+            );
+
+            // Calculate totals
+            const totalExpenseClaimed = expenses.reduce(
+                (sum: number, expense: any) => sum + (expense.amount || 0),
+                0
+            );
+            const totalExpensePassed = expenses.reduce(
+                (sum: number, expense: any) =>
+                    sum + (expense.amountPassed || 0),
+                0
+            );
+
+            // Return public information only (no sensitive data)
+            const publicApplicationData = {
+                id: application.id,
+                applicationNumber: application.applicationNumber,
+                status: application.status,
+                submittedAt: application.submittedAt,
+                updatedAt: application.updatedAt,
+                employeeName: application.employeeName,
+                employeeId: application.employeeId,
+                designation: application.designation,
+                department: application.department,
+                patientName: application.patientName,
+                relationshipWithEmployee: application.relationshipWithEmployee,
+                hospitalName: application.hospitalName,
+                hospitalAddress: application.hospitalAddress,
+                treatmentType: application.treatmentType,
+                totalAmountClaimed: totalExpenseClaimed,
+                totalAmountPassed: totalExpensePassed,
+                reviewComments: application.reviewComments,
+                expenseCount: expenses.length,
+                documentCount: documents.length,
+            };
+
+            logger.info(
+                `Public status check for application: ${applicationNumber}`
+            );
+
+            res.status(200).json({
+                success: true,
+                data: publicApplicationData,
+                message: "Application status retrieved successfully",
+            });
+        } catch (error) {
+            logger.error("Public status check error:", error);
+            res.status(500).json({
+                success: false,
+                message: "Failed to retrieve application status",
+            });
+        }
+    })
+);
+
 export default router;

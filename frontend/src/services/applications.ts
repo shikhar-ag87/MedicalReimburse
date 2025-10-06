@@ -173,13 +173,13 @@ class ApplicationService {
     }
 
     /**
-     * Get application by application number
+     * Get application by application number (public endpoint - no auth required)
      */
     async getApplicationByNumber(
         applicationNumber: string
     ): Promise<ApplicationDetails> {
-        const response = await apiService.get<ApplicationDetails>(
-            "/applications",
+        const response = await apiService.getPublic<ApplicationDetails>(
+            "/applications/public/status",
             {
                 applicationNumber,
             }
@@ -193,7 +193,7 @@ class ApplicationService {
     }
 
     /**
-     * Check application status
+     * Check application status (public endpoint - no auth required)
      */
     async checkStatus(
         applicationNumber: string
@@ -221,7 +221,7 @@ class ApplicationService {
         const formData = new FormData();
 
         formData.append("applicationId", applicationId);
-        files.forEach((file, index) => {
+        files.forEach((file) => {
             formData.append(`documents`, file);
         });
 

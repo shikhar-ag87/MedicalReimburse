@@ -1,51 +1,56 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { FileText, Search, Filter, Eye, Send, ArrowLeft, LogOut } from 'lucide-react';
+import { FileText, Filter, Eye, Send, ArrowLeft, LogOut } from 'lucide-react';
+import { adminService } from '../services/admin';
+import type { AdminApplication } from '../services/admin';
 
 const OBCDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [claims, setClaims] = useState<any[]>([]);
+  const [claims, setClaims] = useState<AdminApplication[]>([]);
   const [selectedClaim, setSelectedClaim] = useState<any>(null);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'obc') {
+    // Wait for auth to load
+    if (authLoading) return;
+
+    if (!user || (user.role !== 'obc' && user.role !== 'admin')) {
       navigate('/admin/login');
       return;
     }
 
-    // Mock data
-    setClaims([
-      {
-        id: 'JNU1234567890',
-        employeeName: 'Dr. Rajesh Kumar',
-        department: 'School of Social Sciences',
-        submissionDate: '2024-01-15',
-        totalAmount: 15750,
-        status: 'pending',
-        patientName: 'Dr. Rajesh Kumar',
-        relationship: 'Self'
-      },
-      {
-        id: 'JNU1234567891',
-        employeeName: 'Prof. Sunita Sharma',
-        department: 'School of Life Sciences',
-        submissionDate: '2024-01-14',
-        totalAmount: 8500,
-        status: 'reviewed',
-        patientName: 'Amit Sharma',
-        relationship: 'Son'
-      }
-    ]);
-  }, [user, navigate]);
+    fetchApplications();
+  }, [user, navigate, authLoading]);
+
+  const fetchApplications = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await adminService.getAllApplications({
+        status: filterStatus === 'all' ? undefined : filterStatus,
+        sortBy: 'submittedAt',
+        sortOrder: 'desc'
+      });
+      setClaims(response.applications);
+    } catch (error: any) {
+      setError(error.message || 'Failed to fetch applications');
+      console.error('Error fetching applications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     const badges = {
       pending: 'bg-yellow-100 text-yellow-800',
-      reviewed: 'bg-green-100 text-green-800',
-      returned: 'bg-red-100 text-red-800'
+      under_review: 'bg-blue-100 text-blue-800',
+      approved: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
+      completed: 'bg-green-100 text-green-800'
     };
     return badges[status as keyof typeof badges] || 'bg-gray-100 text-gray-800';
   };
@@ -94,14 +99,16 @@ const OBCDashboard = () => {
     });
   };
 
-  const handleForwardToClaim = (claimId: string) => {
-    setClaims(claims.map(claim => 
-      claim.id === claimId 
-        ? { ...claim, status: 'reviewed' }
-        : claim
-    ));
-    setSelectedClaim(null);
-    alert('Claim forwarded to Health Centre successfully!');
+  const handleForwardToClaim = async (claimId: string) => {
+    try {
+      await adminService.updateApplicationStatus(claimId, 'under_review', 'Forwarded by OBC Cell to Health Centre');
+      // Refresh the applications list
+      await fetchApplications();
+      setSelectedClaim(null);
+      alert('Claim forwarded to Health Centre successfully!');
+    } catch (error: any) {
+      alert('Failed to forward claim: ' + error.message);
+    }
   };
 
   const filteredClaims = claims.filter(claim => 
@@ -301,80 +308,103 @@ const OBCDashboard = () => {
         </div>
 
         <div className="p-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <FileText className="w-8 h-8 text-yellow-600" />
-                <div className="ml-3">
-                  <p className="text-sm text-yellow-600">Pending Review</p>
-                  <p className="text-xl font-semibold text-yellow-800">
-                    {claims.filter(c => c.status === 'pending').length}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <FileText className="w-8 h-8 text-green-600" />
-                <div className="ml-3">
-                  <p className="text-sm text-green-600">Reviewed</p>
-                  <p className="text-xl font-semibold text-green-800">
-                    {claims.filter(c => c.status === 'reviewed').length}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <FileText className="w-8 h-8 text-blue-600" />
-                <div className="ml-3">
-                  <p className="text-sm text-blue-600">Total Claims</p>
-                  <p className="text-xl font-semibold text-blue-800">{claims.length}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center">
-                <FileText className="w-8 h-8 text-gray-600" />
-                <div className="ml-3">
-                  <p className="text-sm text-gray-600">This Month</p>
-                  <p className="text-xl font-semibold text-gray-800">{claims.length}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Filters */}
-          <div className="flex items-center space-x-4 mb-6">
-            <div className="flex items-center space-x-2">
-              <Filter className="w-4 h-4 text-gray-500" />
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          {error && (
+            <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-red-700">{error}</p>
+              <button 
+                onClick={fetchApplications}
+                className="mt-2 text-red-600 hover:text-red-800 underline"
               >
-                <option value="all">All Claims</option>
-                <option value="pending">Pending Review</option>
-                <option value="reviewed">Reviewed</option>
-                <option value="returned">Returned</option>
-              </select>
+                Retry
+              </button>
             </div>
-          </div>
+          )}
 
-          {/* Claims Table */}
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <span className="ml-2 text-gray-600">Loading applications...</span>
+            </div>
+          ) : (
+            <>
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <FileText className="w-8 h-8 text-yellow-600" />
+                    <div className="ml-3">
+                      <p className="text-sm text-yellow-600">Pending Review</p>
+                      <p className="text-xl font-semibold text-yellow-800">
+                        {claims.filter(c => c.status === 'pending').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <FileText className="w-8 h-8 text-green-600" />
+                    <div className="ml-3">
+                      <p className="text-sm text-green-600">Under Review</p>
+                      <p className="text-xl font-semibold text-green-800">
+                        {claims.filter(c => c.status === 'under_review').length}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <FileText className="w-8 h-8 text-blue-600" />
+                    <div className="ml-3">
+                      <p className="text-sm text-blue-600">Total Claims</p>
+                      <p className="text-xl font-semibold text-blue-800">{claims.length}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <FileText className="w-8 h-8 text-gray-600" />
+                    <div className="ml-3">
+                      <p className="text-sm text-gray-600">This Month</p>
+                      <p className="text-xl font-semibold text-gray-800">{claims.length}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="flex items-center space-x-4 mb-6">
+                <div className="flex items-center space-x-2">
+                  <Filter className="w-4 h-4 text-gray-500" />
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => {
+                      setFilterStatus(e.target.value);
+                      fetchApplications();
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="all">All Claims</option>
+                    <option value="pending">Pending Review</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Claims Table */}
           <div className="overflow-x-auto">
             <table className="min-w-full border border-gray-300">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Tracking ID</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Application Number</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Employee Name</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Department</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Amount</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Date</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Patient Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Amount Claimed</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Submitted Date</th>
                   <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
                   <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Actions</th>
                 </tr>
@@ -382,11 +412,11 @@ const OBCDashboard = () => {
               <tbody className="divide-y divide-gray-200">
                 {filteredClaims.map((claim, index) => (
                   <tr key={claim.id} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-3 text-sm font-mono">{claim.id}</td>
+                    <td className="px-4 py-3 text-sm font-mono">{claim.applicationNumber}</td>
                     <td className="px-4 py-3 text-sm">{claim.employeeName}</td>
-                    <td className="px-4 py-3 text-sm">{claim.department}</td>
-                    <td className="px-4 py-3 text-sm font-medium">₹ {claim.totalAmount.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-sm">{claim.submissionDate}</td>
+                    <td className="px-4 py-3 text-sm">{claim.patientName}</td>
+                    <td className="px-4 py-3 text-sm font-medium">₹ {claim.totalAmountClaimed.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-sm">{new Date(claim.submittedAt).toLocaleDateString('en-IN')}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusBadge(claim.status)}`}>
                         {claim.status.charAt(0).toUpperCase() + claim.status.slice(1)}
@@ -406,6 +436,8 @@ const OBCDashboard = () => {
               </tbody>
             </table>
           </div>
+            </>
+          )}
         </div>
       </div>
     </div>

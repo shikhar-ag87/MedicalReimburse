@@ -97,12 +97,12 @@ router.get(
                         )
                         .slice(0, 5),
                 },
-                admins: {
+                users: {
                     total: totalAdmins,
                     admins: adminUsers.length,
-                    superAdmins: superAdmins.length,
+                    employees: 0, // Admin users table doesn't have employees
                     medicalOfficers: medicalOfficers.length,
-                    recentAdmins: await adminUserRepo.findAll(), // Recent admin users
+                    recentUsers: await adminUserRepo.findAll(), // Recent admin users
                 },
                 system: {
                     serverUptime: process.uptime(),

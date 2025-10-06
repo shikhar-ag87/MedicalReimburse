@@ -13,7 +13,7 @@ export class SupabaseUserRepository implements UserRepository {
         const result: User = {
             id: row.id,
             email: row.email,
-            password: row.password,
+            password: row.password_hash,
             name: row.name,
             role: row.role,
             employeeId: row.employee_id,

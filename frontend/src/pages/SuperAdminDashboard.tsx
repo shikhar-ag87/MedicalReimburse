@@ -1,52 +1,78 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, Download, FileText, TrendingUp, Calendar, LogOut } from 'lucide-react';
+import { adminService } from '../services/admin';
+import type { DashboardStats } from '../services/admin';
 
 const SuperAdminDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState('monthly');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!user || user.role !== 'super-admin') {
+    // Wait for auth to load
+    if (authLoading) return;
+
+    if (!user || (user.role !== 'super-admin' && user.role !== 'super_admin')) {
       navigate('/admin/login');
       return;
     }
 
-    // Mock data for reports
-    setStats({
-      totalClaims: 156,
-      approvedClaims: 134,
-      rejectedClaims: 12,
-      pendingClaims: 10,
-      totalAmount: 2850000,
-      approvedAmount: 2456000,
-      avgProcessingTime: 8.5,
-      monthlyData: [
-        { month: 'Jan', claims: 45, amount: 850000 },
-        { month: 'Feb', claims: 38, amount: 720000 },
-        { month: 'Mar', claims: 52, amount: 980000 },
-        { month: 'Apr', claims: 41, amount: 760000 },
-        { month: 'May', claims: 48, amount: 890000 }
-      ],
-      topDepartments: [
-        { name: 'School of Social Sciences', claims: 28, amount: 520000 },
-        { name: 'School of Life Sciences', claims: 24, amount: 450000 },
-        { name: 'School of Physical Sciences', claims: 22, amount: 410000 },
-        { name: 'School of International Studies', claims: 18, amount: 340000 }
-      ]
-    });
-  }, [user, navigate]);
+    fetchDashboardStats();
+  }, [user, navigate, authLoading]);
+
+  const fetchDashboardStats = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const dashboardStats = await adminService.getDashboardStats();
+      setStats(dashboardStats);
+    } catch (error: any) {
+      setError(error.message || 'Failed to fetch dashboard statistics');
+      console.error('Error fetching dashboard stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const generateReport = (format: 'excel' | 'pdf') => {
     // Mock report generation
     alert(`${format.toUpperCase()} report will be downloaded. This feature would integrate with actual data export in production.`);
   };
 
+  if (authLoading || loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button 
+            onClick={fetchDashboardStats}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!stats) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>;
+    return <div className="flex items-center justify-center h-64">No data available</div>;
   }
 
   return (
@@ -81,7 +107,7 @@ const SuperAdminDashboard = () => {
                 <FileText className="w-8 h-8 text-blue-600" />
                 <div className="ml-4">
                   <p className="text-sm text-blue-600">Total Claims</p>
-                  <p className="text-2xl font-bold text-blue-800">{stats.totalClaims}</p>
+                  <p className="text-2xl font-bold text-blue-800">{stats.applications.total}</p>
                   <p className="text-xs text-blue-600 mt-1">This fiscal year</p>
                 </div>
               </div>
@@ -92,9 +118,9 @@ const SuperAdminDashboard = () => {
                 <TrendingUp className="w-8 h-8 text-green-600" />
                 <div className="ml-4">
                   <p className="text-sm text-green-600">Approved Claims</p>
-                  <p className="text-2xl font-bold text-green-800">{stats.approvedClaims}</p>
+                  <p className="text-2xl font-bold text-green-800">{stats.applications.approved}</p>
                   <p className="text-xs text-green-600 mt-1">
-                    {((stats.approvedClaims / stats.totalClaims) * 100).toFixed(1)}% approval rate
+                    {((stats.applications.approved / stats.applications.total) * 100).toFixed(1)}% approval rate
                   </p>
                 </div>
               </div>
@@ -104,11 +130,11 @@ const SuperAdminDashboard = () => {
               <div className="flex items-center">
                 <BarChart3 className="w-8 h-8 text-purple-600" />
                 <div className="ml-4">
-                  <p className="text-sm text-purple-600">Total Amount</p>
+                  <p className="text-sm text-purple-600">Pending Review</p>
                   <p className="text-2xl font-bold text-purple-800">
-                    ₹ {(stats.totalAmount / 1000000).toFixed(1)}M
+                    {stats.applications.pending}
                   </p>
-                  <p className="text-xs text-purple-600 mt-1">Claimed amount</p>
+                  <p className="text-xs text-purple-600 mt-1">Awaiting action</p>
                 </div>
               </div>
             </div>
@@ -117,9 +143,9 @@ const SuperAdminDashboard = () => {
               <div className="flex items-center">
                 <Calendar className="w-8 h-8 text-yellow-600" />
                 <div className="ml-4">
-                  <p className="text-sm text-yellow-600">Avg Processing</p>
-                  <p className="text-2xl font-bold text-yellow-800">{stats.avgProcessingTime}</p>
-                  <p className="text-xs text-yellow-600 mt-1">Days per claim</p>
+                  <p className="text-sm text-yellow-600">Under Review</p>
+                  <p className="text-2xl font-bold text-yellow-800">{stats.applications.underReviewCount}</p>
+                  <p className="text-xs text-yellow-600 mt-1">Being processed</p>
                 </div>
               </div>
             </div>
@@ -143,46 +169,44 @@ const SuperAdminDashboard = () => {
               </div>
               
               <div className="space-y-3">
-                {stats.monthlyData.map((month: any, index: number) => (
-                  <div key={month.month} className="flex items-center justify-between">
+                {stats.applications.recentApplications.slice(0, 5).map((app) => (
+                  <div key={app.id} className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
                       <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center text-xs font-medium text-blue-800">
-                        {month.month}
+                        {app.applicationNumber.slice(-4)}
                       </div>
                       <div>
-                        <p className="text-sm font-medium">{month.claims} Claims</p>
-                        <p className="text-xs text-gray-600">₹ {(month.amount / 1000).toFixed(0)}K</p>
+                        <p className="text-sm font-medium">{app.employeeName}</p>
+                        <p className="text-xs text-gray-600">₹ {app.totalAmountClaimed.toLocaleString()}</p>
                       </div>
                     </div>
-                    <div className="w-24 bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${(month.claims / 60) * 100}%` }}
-                      />
+                    <div className="text-xs">
+                      <span className={`px-2 py-1 rounded-full ${
+                        app.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        app.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-blue-100 text-blue-800'
+                      }`}>
+                        {app.status}
+                      </span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Top Departments */}
+            {/* Recent Users */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Departments by Claims</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Users</h3>
               <div className="space-y-3">
-                {stats.topDepartments.map((dept: any, index: number) => (
-                  <div key={dept.name} className="flex items-center justify-between">
+                {stats.users.recentUsers.slice(0, 5).map((user) => (
+                  <div key={user.id} className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">{dept.name}</p>
-                      <p className="text-xs text-gray-600">{dept.claims} claims</p>
+                      <p className="text-sm font-medium text-gray-900">{user.name}</p>
+                      <p className="text-xs text-gray-600">{user.role}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-semibold">₹ {(dept.amount / 1000).toFixed(0)}K</p>
-                      <div className="w-16 bg-gray-200 rounded-full h-2 mt-1">
-                        <div 
-                          className="bg-green-500 h-2 rounded-full"
-                          style={{ width: `${(dept.amount / 600000) * 100}%` }}
-                        />
-                      </div>
+                      <p className="text-xs text-gray-600">{user.email}</p>
+                      <span className={`inline-block w-2 h-2 rounded-full ${user.isActive ? 'bg-green-500' : 'bg-gray-400'}`}></span>
                     </div>
                   </div>
                 ))}
@@ -219,21 +243,23 @@ const SuperAdminDashboard = () => {
 
             {/* Financial Summary */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Financial Summary</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">System Summary</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total Claimed:</span>
-                  <span className="text-sm font-semibold">₹ {(stats.totalAmount / 1000000).toFixed(2)}M</span>
+                  <span className="text-sm text-gray-600">Total Users:</span>
+                  <span className="text-sm font-semibold">{stats.users.total}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total Approved:</span>
-                  <span className="text-sm font-semibold text-green-600">₹ {(stats.approvedAmount / 1000000).toFixed(2)}M</span>
+                  <span className="text-sm text-gray-600">Admins:</span>
+                  <span className="text-sm font-semibold text-green-600">{stats.users.admins}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Employees:</span>
+                  <span className="text-sm font-semibold text-blue-600">{stats.users.employees}</span>
                 </div>
                 <div className="flex justify-between border-t border-gray-300 pt-2">
-                  <span className="text-sm text-gray-600">Savings:</span>
-                  <span className="text-sm font-semibold text-blue-600">
-                    ₹ {((stats.totalAmount - stats.approvedAmount) / 1000000).toFixed(2)}M
-                  </span>
+                  <span className="text-sm text-gray-600">Server Uptime:</span>
+                  <span className="text-sm font-semibold">{Math.floor(stats.system.serverUptime / 3600)}h</span>
                 </div>
               </div>
             </div>

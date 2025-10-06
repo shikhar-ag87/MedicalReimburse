@@ -22,19 +22,30 @@ const AdminLogin = () => {
     try {
       const success = await login(credentials);
       if (success) {
-        // Redirect based on role
-        if (credentials.username === 'obc_admin') {
-          navigate('/admin/obc');
-        } else if (credentials.username === 'health_admin') {
-          navigate('/admin/health-centre');
-        } else if (credentials.username === 'super_admin') {
-          navigate('/admin/super');
-        }
+        // Get the user from auth context to determine role
+        // The login will store the user, so we need to wait a moment
+        setTimeout(() => {
+          const storedUser = localStorage.getItem('currentUser');
+          if (storedUser) {
+            const user = JSON.parse(storedUser);
+            // Redirect based on role from backend
+            if (user.role === 'admin') {
+              navigate('/admin/obc');
+            } else if (user.role === 'medical_officer') {
+              navigate('/admin/health-centre');
+            } else if (user.role === 'super_admin') {
+              navigate('/admin/super');
+            } else {
+              // Default redirect for other admin types
+              navigate('/admin/obc');
+            }
+          }
+        }, 100);
       } else {
-        setError('Invalid username or password');
+        setError('Invalid email or password. Please check your credentials and try again.');
       }
-    } catch (err) {
-      setError('Login failed. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Login failed. Please check your credentials and try again.');
     }
     
     setLoading(false);
