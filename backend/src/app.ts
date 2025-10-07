@@ -19,6 +19,7 @@ import applicationRoutes from "./routes/applications";
 import fileRoutes from "./routes/files";
 import adminRoutes from "./routes/admin";
 import userRoutes from "./routes/users";
+import reviewRoutes from "./routes/reviews";
 
 // Load environment variables
 dotenv.config();
@@ -99,6 +100,7 @@ export function createApp(): express.Express {
                 files: "/api/files",
                 admin: "/api/admin",
                 users: "/api/users",
+                reviews: "/api/reviews",
             },
             timestamp: new Date().toISOString(),
         });
@@ -110,6 +112,7 @@ export function createApp(): express.Express {
     app.use("/api/files", fileRoutes);
     app.use("/api/admin", adminRoutes);
     app.use("/api/users", userRoutes);
+    app.use("/api/reviews", reviewRoutes);
 
     // 404 handler
     app.use(notFoundHandler);

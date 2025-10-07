@@ -171,8 +171,16 @@ router.post(
                 return;
             }
 
-            logger.debug(`User found: ${user.email}, role: ${user.role}, active: ${user.isActive}`);
-            logger.debug(`Password hash from DB: ${user.password ? user.password.substring(0, 20) + '...' : 'NULL'}`);
+            logger.debug(
+                `User found: ${user.email}, role: ${user.role}, active: ${user.isActive}`
+            );
+            logger.debug(
+                `Password hash from DB: ${
+                    user.password
+                        ? user.password.substring(0, 20) + "..."
+                        : "NULL"
+                }`
+            );
 
             // Check if user is active
             if (!user.isActive) {
@@ -192,7 +200,7 @@ router.post(
                 user.password
             );
             logger.debug(`Password valid: ${isPasswordValid}`);
-            
+
             if (!isPasswordValid) {
                 logger.debug(`Login failed: Invalid password for ${email}`);
                 res.status(401).json({
