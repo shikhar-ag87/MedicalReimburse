@@ -21,69 +21,115 @@ const StatusTracker = () => {
             {
                 stage: "submitted",
                 title: "Claim Submitted",
-                description: "Claim form submitted by employee",
-                date: new Date(application.submittedAt).toLocaleDateString(
-                    "en-IN"
-                ),
+                description: "Application submitted successfully",
+                date: new Date(application.submittedAt).toLocaleDateString("en-IN"),
                 completed: true,
+                icon: "check"
             },
             {
                 stage: "obc_review",
-                title: "OBC Cell Review",
+                title: "OBC Cell Initial Review",
                 description: "Under review by OBC/SC/ST Cell",
                 date: null,
                 completed: false,
+                current: false,
+                icon: "pending"
             },
             {
                 stage: "health_centre_review",
-                title: "Health Centre Review",
-                description: "Forwarded to Health Centre for medical review",
+                title: "Health Centre Medical Review",
+                description: "Medical assessment by Health Centre",
                 date: null,
                 completed: false,
+                current: false,
+                icon: "pending"
+            },
+            {
+                stage: "obc_final_review",
+                title: "OBC Cell Final Review",
+                description: "Final verification by OBC Cell",
+                date: null,
+                completed: false,
+                current: false,
+                icon: "pending"
             },
             {
                 stage: "admin_approval",
-                title: "Final Approval",
-                description: "Final approval by Administration",
+                title: "Super Admin Final Approval",
+                description: "Final authorization for payment",
                 date: null,
                 completed: false,
+                current: false,
+                icon: "pending"
+            },
+            {
+                stage: "reimbursed",
+                title: "Payment Processed",
+                description: "Reimbursement completed",
+                date: null,
+                completed: false,
+                current: false,
+                icon: "pending"
             },
         ];
 
         // Update timeline based on actual status
+        const updateDate = new Date(application.updatedAt).toLocaleDateString("en-IN");
+        
         switch (application.status) {
             case "pending":
-                // Just submitted
+                // Just submitted, waiting for OBC review
+                baseTimeline[1].current = true;
                 break;
+                
             case "under_review":
+                // At Health Centre
                 baseTimeline[1].completed = true;
-                baseTimeline[1].date = new Date(
-                    application.updatedAt
-                ).toLocaleDateString("en-IN");
-                baseTimeline[2].completed = false;
-                (baseTimeline[2] as any).current = true;
+                baseTimeline[1].date = updateDate;
+                baseTimeline[2].current = true;
                 break;
+                
+            case "back_to_obc":
+                // Returned to OBC for final review
+                baseTimeline[1].completed = true;
+                baseTimeline[2].completed = true;
+                baseTimeline[2].date = updateDate;
+                baseTimeline[3].current = true;
+                break;
+                
             case "approved":
+                // Approved by OBC, waiting for Super Admin
                 baseTimeline[1].completed = true;
                 baseTimeline[2].completed = true;
                 baseTimeline[3].completed = true;
-                baseTimeline[3].date = new Date(
-                    application.updatedAt
-                ).toLocaleDateString("en-IN");
+                baseTimeline[3].date = updateDate;
+                baseTimeline[4].current = true;
                 break;
-            case "rejected":
-                baseTimeline[1].completed = true;
-                baseTimeline[1].date = new Date(
-                    application.updatedAt
-                ).toLocaleDateString("en-IN");
-                break;
-            case "completed":
+                
+            case "reimbursed":
+                // Fully completed
                 baseTimeline.forEach((stage, index) => {
                     stage.completed = true;
                     if (index === baseTimeline.length - 1) {
-                        stage.date = new Date(
-                            application.updatedAt
-                        ).toLocaleDateString("en-IN");
+                        stage.date = updateDate;
+                    }
+                });
+                break;
+                
+            case "rejected":
+                // Find which stage it was rejected at
+                if (application.updatedAt) {
+                    baseTimeline[1].completed = true;
+                    baseTimeline[1].date = updateDate;
+                }
+                break;
+                
+            case "completed":
+                // Legacy status - treat as reimbursed
+                baseTimeline.forEach((stage, index) => {
+                    stage.completed = true;
+                    if (index === baseTimeline.length - 1) {
+                        stage.date = updateDate;
                     }
                 });
                 break;
@@ -132,19 +178,6 @@ const StatusTracker = () => {
         } finally {
             setLoading(false);
         }
-    };
-
-    const getStatusIcon = (stage: any) => {
-        if (stage.completed)
-            return <CheckCircle className="w-5 h-5 text-green-600" />;
-        if (stage.current) return <Clock className="w-5 h-5 text-blue-600" />;
-        return <AlertCircle className="w-5 h-5 text-gray-400" />;
-    };
-
-    const getStatusColor = (stage: any) => {
-        if (stage.completed) return "text-green-600";
-        if (stage.current) return "text-blue-600";
-        return "text-gray-400";
     };
 
     return (
@@ -210,6 +243,47 @@ const StatusTracker = () => {
 
                     {claimStatus && (
                         <div className="space-y-6">
+                            {/* Current Status Banner */}
+                            <div className={`rounded-lg p-6 border-2 ${
+                                claimStatus.currentStatus === "reimbursed" 
+                                    ? "bg-purple-50 border-purple-300"
+                                    : claimStatus.currentStatus === "rejected"
+                                    ? "bg-red-50 border-red-300"
+                                    : claimStatus.currentStatus === "approved"
+                                    ? "bg-green-50 border-green-300"
+                                    : "bg-blue-50 border-blue-300"
+                            }`}>
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                                            Current Status / वर्तमान स्थिति
+                                        </h3>
+                                        <p className={`text-2xl font-bold ${
+                                            claimStatus.currentStatus === "reimbursed"
+                                                ? "text-purple-700"
+                                                : claimStatus.currentStatus === "rejected"
+                                                ? "text-red-700"
+                                                : claimStatus.currentStatus === "approved"
+                                                ? "text-green-700"
+                                                : "text-blue-700"
+                                        }`}>
+                                            {claimStatus.currentStatus === "pending" && "⏳ Pending - Awaiting OBC Review"}
+                                            {claimStatus.currentStatus === "under_review" && "🔍 Under Review - Health Centre"}
+                                            {claimStatus.currentStatus === "back_to_obc" && "🔄 Final Review - OBC Cell"}
+                                            {claimStatus.currentStatus === "approved" && "✅ Approved - Awaiting Final Authorization"}
+                                            {claimStatus.currentStatus === "reimbursed" && "🎉 Reimbursed - Payment Completed"}
+                                            {claimStatus.currentStatus === "rejected" && "❌ Rejected"}
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm text-gray-600">Application Number</p>
+                                        <p className="font-mono font-bold text-xl text-gray-900">
+                                            {claimStatus.trackingId}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Claim Summary */}
                             <div className="bg-gray-50 rounded-lg p-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -298,39 +372,70 @@ const StatusTracker = () => {
 
                             {/* Status Timeline */}
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                                    Processing Timeline
+                                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                                    <Clock className="w-5 h-5 mr-2" />
+                                    Processing Timeline / प्रक्रिया समयरेखा
                                 </h3>
-                                <div className="space-y-4">
-                                    {claimStatus.timeline.map((stage: any) => (
-                                        <div
-                                            key={stage.stage}
-                                            className="flex items-start space-x-4"
-                                        >
-                                            <div className="flex-shrink-0">
-                                                {getStatusIcon(stage)}
-                                            </div>
-                                            <div className="flex-1">
-                                                <div className="flex items-center justify-between">
-                                                    <h4
-                                                        className={`font-medium ${getStatusColor(
-                                                            stage
-                                                        )}`}
-                                                    >
-                                                        {stage.title}
-                                                    </h4>
-                                                    {stage.date && (
-                                                        <span className="text-sm text-gray-500">
-                                                            {stage.date}
-                                                        </span>
+                                <div className="relative">
+                                    {/* Vertical Line */}
+                                    <div className="absolute left-[10px] top-2 bottom-2 w-0.5 bg-gray-300"></div>
+                                    
+                                    <div className="space-y-6">
+                                        {claimStatus.timeline.map((stage: any) => (
+                                            <div
+                                                key={stage.stage}
+                                                className="relative flex items-start space-x-4"
+                                            >
+                                                {/* Icon Circle */}
+                                                <div className={`relative z-10 flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+                                                    stage.completed
+                                                        ? "bg-green-500 border-green-500"
+                                                        : stage.current
+                                                        ? "bg-blue-500 border-blue-500 animate-pulse"
+                                                        : "bg-white border-gray-300"
+                                                }`}>
+                                                    {stage.completed && (
+                                                        <CheckCircle className="w-4 h-4 text-white" />
+                                                    )}
+                                                    {stage.current && (
+                                                        <Clock className="w-4 h-4 text-white" />
                                                     )}
                                                 </div>
-                                                <p className="text-sm text-gray-600 mt-1">
-                                                    {stage.description}
-                                                </p>
+                                                
+                                                {/* Content */}
+                                                <div className={`flex-1 pb-6 ${
+                                                    stage.current ? "bg-blue-50 -ml-2 -mt-2 p-4 rounded-lg border-2 border-blue-300" : ""
+                                                }`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className={`font-semibold text-base ${
+                                                            stage.completed
+                                                                ? "text-green-700"
+                                                                : stage.current
+                                                                ? "text-blue-700"
+                                                                : "text-gray-500"
+                                                        }`}>
+                                                            {stage.title}
+                                                        </h4>
+                                                        {stage.date && (
+                                                            <span className="text-sm text-gray-600 font-medium">
+                                                                📅 {stage.date}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className={`text-sm mt-1 ${
+                                                        stage.current ? "text-blue-600" : "text-gray-600"
+                                                    }`}>
+                                                        {stage.description}
+                                                    </p>
+                                                    {stage.current && (
+                                                        <p className="text-xs text-blue-700 mt-2 font-medium">
+                                                            ⏱️ Currently at this stage
+                                                        </p>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
 
