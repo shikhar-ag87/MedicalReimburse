@@ -12,7 +12,7 @@ export interface ApplicationSubmissionResponse {
 export interface Application {
     id: string;
     applicationNumber: string;
-    status: "pending" | "under_review" | "approved" | "rejected" | "completed";
+    status: "pending" | "under_review" | "back_to_obc" | "approved" | "rejected" | "completed" | "reimbursed";
     submittedAt: string;
     updatedAt: string;
     employeeName: string;
@@ -222,7 +222,7 @@ class ApplicationService {
 
         formData.append("applicationId", applicationId);
         files.forEach((file) => {
-            formData.append(`documents`, file);
+            formData.append("files", file);
         });
 
         const response = await apiService.uploadFile<{

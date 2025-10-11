@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { adminService } from "../services/admin";
 import type { AdminApplication } from "../services/admin";
+import { apiService } from "../services/api";
 import ComprehensiveReviewModal from "../components/review/ComprehensiveReviewModal";
 
 const OBCDashboard = () => {
@@ -47,6 +48,7 @@ const OBCDashboard = () => {
                 sortOrder: "desc",
             });
             setClaims(response.applications);
+            
         } catch (error: any) {
             setError(error.message || "Failed to fetch applications");
             console.error("Error fetching applications:", error);
@@ -59,70 +61,133 @@ const OBCDashboard = () => {
         const badges = {
             pending: "bg-yellow-100 text-yellow-800",
             under_review: "bg-blue-100 text-blue-800",
+            back_to_obc: "bg-orange-100 text-orange-800",
             approved: "bg-green-100 text-green-800",
             rejected: "bg-red-100 text-red-800",
             completed: "bg-green-100 text-green-800",
+            reimbursed: "bg-purple-100 text-purple-800",
         };
         return (
             badges[status as keyof typeof badges] || "bg-gray-100 text-gray-800"
         );
     };
 
-    const handleViewClaim = (claim: any) => {
-        setSelectedClaim({
-            ...claim,
-            employee: {
-                name: claim.employeeName,
-                employeeId: "EMP001",
-                department: claim.department,
-                medicalCardNumber: "CGHS123456",
-                cardValidity: "2025-12-31",
-                wardEntitlement: "Private",
-            },
-            patient: {
-                name: claim.patientName,
-                relationship: claim.relationship,
-            },
-            treatment: {
-                hospitalDetails: "AIIMS, New Delhi",
-                priorPermission: "yes",
-                emergency: "no",
-                insuranceDetails: "",
-            },
-            expenses: [
-                {
-                    id: "1",
-                    billNo: "B001",
-                    date: "2024-01-10",
-                    description: "General Consultation",
-                    category: "OPD",
-                    amountClaimed: 5000,
-                    amountPassed: 5000,
-                },
-                {
-                    id: "2",
-                    billNo: "B002",
-                    date: "2024-01-11",
-                    description: "Blood Tests",
-                    category: "Tests",
-                    amountClaimed: 2500,
-                    amountPassed: 2500,
-                },
-            ],
-        });
+    const getReviewStatusBadge = (claim: AdminApplication) => {
+        const totalReviews = claim.reviewSummary?.totalReviews || 0;
+        const lastDecision = claim.reviewSummary?.lastDecision;
+
+        if (totalReviews === 0) {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                    Pending Review
+                </span>
+            );
+        }
+        
+        if (claim.status === "pending") {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
+                    ✓ Reviewed • Awaiting Forwarding
+                </span>
+            );
+        }
+
+        if (claim.status === "under_review") {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
+                    ✓ Reviewed • At Health Centre
+                </span>
+            );
+        }
+        
+        if (claim.status === "back_to_obc") {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-100 text-orange-700">
+                    ✓ Returned from Health Centre • Needs Final Review
+                </span>
+            );
+        }
+        
+        if (claim.status === "approved") {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                    ✓ Health Centre Approved
+                </span>
+            );
+        }
+        
+        if (claim.status === "rejected") {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-700">
+                    Rejected
+                </span>
+            );
+        }
+        
+        if (claim.status === "completed") {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                    ✓ Completed
+                </span>
+            );
+        }
+        
+        if (claim.status === "reimbursed") {
+            return (
+                <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                    ✓ Reimbursed
+                </span>
+            );
+        }
+        
+        return (
+            <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
+                {lastDecision ? `Reviewed (${lastDecision})` : claim.status}
+            </span>
+        );
+    };
+
+    const handleViewClaim = async (claim: any) => {
+        try {
+            setLoading(true);
+            setError(null);
+            // Fetch real application details with expenses and documents
+            const resp = await apiService.get<any>(`/applications/${claim.id}`);
+            if (!resp.success || !resp.data) {
+                throw new Error(resp.message || "Failed to load claim details");
+            }
+            const { application, expenses, documents } = resp.data;
+            setSelectedClaim({ 
+                ...application, 
+                expenses: expenses || [], 
+                documents: documents || [] 
+            });
+        } catch (e: any) {
+            console.error("Error loading claim details:", e);
+            setError(e.message || "Failed to load claim details");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleForwardToClaim = async (claimId: string) => {
         try {
+            const claim = claims.find(c => c.id === claimId);
+            const isBackFromHealthCentre = claim?.status === "back_to_obc";
+            
             await adminService.updateApplicationStatus(
                 claimId,
-                "under_review",
-                "Forwarded by OBC Cell to Health Centre"
+                isBackFromHealthCentre ? "approved" : "under_review",
+                isBackFromHealthCentre 
+                    ? "Final review completed by OBC Cell - Forwarded to Super Admin"
+                    : "Forwarded by OBC Cell to Health Centre"
             );
             // Refresh the applications list
             await fetchApplications();
             setSelectedClaim(null);
-            alert("Claim forwarded to Health Centre successfully!");
+            alert(isBackFromHealthCentre 
+                ? "Claim forwarded to Super Admin successfully!"
+                : "Claim forwarded to Health Centre successfully!");
         } catch (error: any) {
             alert("Failed to forward claim: " + error.message);
         }
@@ -134,7 +199,7 @@ const OBCDashboard = () => {
     };
 
     const handleReviewComplete = () => {
-        fetchApplications();
+        // Don't reload - let the status update persist without fetching
         setShowReviewModal(false);
         setReviewingClaim(null);
     };
@@ -182,7 +247,7 @@ const OBCDashboard = () => {
                                                 Name:
                                             </span>
                                             <p className="font-medium">
-                                                {selectedClaim.employee.name}
+                                                {selectedClaim.employeeName}
                                             </p>
                                         </div>
                                         <div>
@@ -190,10 +255,7 @@ const OBCDashboard = () => {
                                                 Employee ID:
                                             </span>
                                             <p className="font-medium">
-                                                {
-                                                    selectedClaim.employee
-                                                        .employeeId
-                                                }
+                                                {selectedClaim.employeeId}
                                             </p>
                                         </div>
                                         <div>
@@ -201,10 +263,7 @@ const OBCDashboard = () => {
                                                 Department:
                                             </span>
                                             <p className="font-medium">
-                                                {
-                                                    selectedClaim.employee
-                                                        .department
-                                                }
+                                                {selectedClaim.department}
                                             </p>
                                         </div>
                                         <div>
@@ -212,10 +271,7 @@ const OBCDashboard = () => {
                                                 CGHS Card:
                                             </span>
                                             <p className="font-medium">
-                                                {
-                                                    selectedClaim.employee
-                                                        .medicalCardNumber
-                                                }
+                                                {selectedClaim.cghsCardNumber}
                                             </p>
                                         </div>
                                     </div>
@@ -232,7 +288,7 @@ const OBCDashboard = () => {
                                                 Patient Name:
                                             </span>
                                             <p className="font-medium">
-                                                {selectedClaim.patient.name}
+                                                {selectedClaim.patientName}
                                             </p>
                                         </div>
                                         <div>
@@ -240,10 +296,7 @@ const OBCDashboard = () => {
                                                 Relationship:
                                             </span>
                                             <p className="font-medium">
-                                                {
-                                                    selectedClaim.patient
-                                                        .relationship
-                                                }
+                                                {selectedClaim.relationshipWithEmployee}
                                             </p>
                                         </div>
                                     </div>
@@ -260,10 +313,15 @@ const OBCDashboard = () => {
                                                 Hospital:
                                             </span>
                                             <p className="font-medium">
-                                                {
-                                                    selectedClaim.treatment
-                                                        .hospitalDetails
-                                                }
+                                                {selectedClaim.hospitalName}
+                                            </p>
+                                        </div>
+                                        <div className="mb-2">
+                                            <span className="text-gray-600">
+                                                Hospital Address:
+                                            </span>
+                                            <p className="font-medium">
+                                                {selectedClaim.hospitalAddress}
                                             </p>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
@@ -272,11 +330,7 @@ const OBCDashboard = () => {
                                                     Prior Permission:
                                                 </span>
                                                 <p className="font-medium">
-                                                    {selectedClaim.treatment
-                                                        .priorPermission ===
-                                                    "yes"
-                                                        ? "Yes"
-                                                        : "No"}
+                                                    {selectedClaim.priorPermission ? "Yes" : "No"}
                                                 </p>
                                             </div>
                                             <div>
@@ -284,10 +338,7 @@ const OBCDashboard = () => {
                                                     Emergency:
                                                 </span>
                                                 <p className="font-medium">
-                                                    {selectedClaim.treatment
-                                                        .emergency === "yes"
-                                                        ? "Yes"
-                                                        : "No"}
+                                                    {selectedClaim.emergencyTreatment ? "Yes" : "No"}
                                                 </p>
                                             </div>
                                         </div>
@@ -321,30 +372,23 @@ const OBCDashboard = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-gray-200">
-                                                {selectedClaim.expenses.map(
+                                                {selectedClaim.expenses?.map(
                                                     (expense: any) => (
                                                         <tr key={expense.id}>
                                                             <td className="px-3 py-2">
-                                                                {expense.billNo}
+                                                                {expense.billNumber}
                                                             </td>
                                                             <td className="px-3 py-2">
-                                                                {expense.date}
+                                                                {expense.billDate ? new Date(expense.billDate).toLocaleDateString("en-IN") : "-"}
                                                             </td>
                                                             <td className="px-3 py-2">
-                                                                {
-                                                                    expense.description
-                                                                }
+                                                                {expense.description}
                                                             </td>
                                                             <td className="px-3 py-2">
-                                                                {
-                                                                    expense.category
-                                                                }
+                                                                -
                                                             </td>
                                                             <td className="px-3 py-2 text-right font-medium">
-                                                                ₹{" "}
-                                                                {
-                                                                    expense.amountClaimed
-                                                                }
+                                                                ₹ {expense.amountClaimed}
                                                             </td>
                                                         </tr>
                                                     )
@@ -359,20 +403,58 @@ const OBCDashboard = () => {
                                                         Total:
                                                     </td>
                                                     <td className="px-3 py-2 text-right font-bold text-blue-600">
-                                                        ₹{" "}
-                                                        {selectedClaim.expenses.reduce(
-                                                            (
-                                                                total: number,
-                                                                expense: any
-                                                            ) =>
-                                                                total +
-                                                                expense.amountClaimed,
+                                                        ₹ {selectedClaim.expenses?.reduce(
+                                                            (total: number, expense: any) =>
+                                                                total + (expense.amountClaimed || 0),
                                                             0
                                                         )}
                                                     </td>
                                                 </tr>
                                             </tfoot>
                                         </table>
+                                    </div>
+                                </div>
+
+                                {/* Supporting Documents Section */}
+                                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    <h3 className="font-semibold text-gray-900 mb-4">
+                                        Supporting Documents
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {selectedClaim.documents && selectedClaim.documents.length > 0 ? (
+                                            selectedClaim.documents.map((doc: any, index: number) => (
+                                                <div
+                                                    key={doc.id || index}
+                                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100"
+                                                >
+                                                    <div className="flex items-center space-x-3">
+                                                        <FileText className="w-5 h-5 text-blue-600" />
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-900">
+                                                                {doc.fileName || doc.file_name || `Document ${index + 1}`}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">
+                                                                {doc.fileType || doc.file_type || 'Unknown type'} • 
+                                                                {doc.fileSize ? ` ${(doc.fileSize / 1024).toFixed(2)} KB` : 
+                                                                 doc.file_size ? ` ${(doc.file_size / 1024).toFixed(2)} KB` : ' Size unknown'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <a
+                                                        href={doc.filePath || doc.file_path}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                                    >
+                                                        View
+                                                    </a>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 text-center py-4">
+                                                No documents uploaded
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -401,7 +483,9 @@ const OBCDashboard = () => {
                                         >
                                             <Send className="w-4 h-4" />
                                             <span>
-                                                Forward to Health Centre
+                                                {selectedClaim.status === "back_to_obc" 
+                                                    ? "Forward to Super Admin"
+                                                    : "Forward to Health Centre"}
                                             </span>
                                         </button>
 
@@ -421,7 +505,7 @@ const OBCDashboard = () => {
                                                 Submitted:
                                             </span>
                                             <span>
-                                                {selectedClaim.submissionDate}
+                                                {selectedClaim.submittedAt ? new Date(selectedClaim.submittedAt).toLocaleDateString("en-IN") : "-"}
                                             </span>
                                         </div>
                                         <div className="flex justify-between">
@@ -429,7 +513,7 @@ const OBCDashboard = () => {
                                                 Current Status:
                                             </span>
                                             <span className="font-medium">
-                                                OBC Review
+                                                {selectedClaim.status ? selectedClaim.status.replace("_", " ").replace(/\b\w/g, (c: string) => c.toUpperCase()) : "-"}
                                             </span>
                                         </div>
                                     </div>
@@ -581,6 +665,9 @@ const OBCDashboard = () => {
                                         <option value="under_review">
                                             Under Review
                                         </option>
+                                        <option value="back_to_obc">
+                                            Returned from Health Centre
+                                        </option>
                                         <option value="approved">
                                             Approved
                                         </option>
@@ -613,6 +700,9 @@ const OBCDashboard = () => {
                                             </th>
                                             <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
                                                 Status
+                                            </th>
+                                            <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">
+                                                Review Status
                                             </th>
                                             <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">
                                                 Actions
@@ -662,6 +752,9 @@ const OBCDashboard = () => {
                                                                 1
                                                             )}
                                                     </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {getReviewStatusBadge(claim)}
                                                 </td>
                                                 <td className="px-4 py-3 text-center">
                                                     <div className="flex items-center justify-center space-x-2">

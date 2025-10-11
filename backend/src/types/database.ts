@@ -45,7 +45,7 @@ export interface DatabaseRepository<T, CreateData, UpdateData> {
 export interface MedicalApplication {
     id: string;
     applicationNumber: string;
-    status: "pending" | "under_review" | "approved" | "rejected" | "completed";
+    status: "pending" | "under_review" | "back_to_obc" | "approved" | "rejected" | "completed" | "reimbursed";
     submittedAt: Date;
     updatedAt: Date;
 

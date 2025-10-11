@@ -131,9 +131,11 @@ const options: swaggerJsdoc.Options = {
                             enum: [
                                 "pending",
                                 "under_review",
+                                "back_to_obc",
                                 "approved",
                                 "rejected",
                                 "completed",
+                                "reimbursed",
                             ],
                             description: "Current status of the application",
                         },

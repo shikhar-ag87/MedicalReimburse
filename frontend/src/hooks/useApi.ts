@@ -34,13 +34,31 @@ export const useApplicationSubmission = (): UseApplicationSubmissionResult => {
             console.log("Submitting application with data:", formData);
             const result = await applicationService.submitApplication(formData);
 
+            console.log("Application submitted successfully:", result);
+
+            // Upload documents if any files were selected
+            if (formData.documents.uploadedFiles && formData.documents.uploadedFiles.length > 0) {
+                console.log(`Uploading ${formData.documents.uploadedFiles.length} documents for application ${result.applicationId}`);
+                try {
+                    await applicationService.uploadDocuments(
+                        result.applicationId,
+                        formData.documents.uploadedFiles
+                    );
+                    console.log("Documents uploaded successfully");
+                } catch (uploadError) {
+                    console.error("Document upload failed:", uploadError);
+                    // Don't fail the whole submission if documents fail to upload
+                    // But log it prominently
+                }
+            } else {
+                console.log("No documents to upload");
+            }
+
             setSubmissionResult(result);
             setIsSubmitted(true);
 
             // Clear form data from localStorage on successful submission
             localStorage.removeItem("medicalReimbursementForm");
-
-            console.log("Application submitted successfully:", result);
         } catch (err) {
             const errorMessage = handleApiError(err as Error);
             setError(errorMessage);
@@ -88,7 +106,7 @@ export const useServerHealth = (): UseServerHealthResult => {
         try {
             // Use the same base URL as the API service
             const API_BASE_URL =
-                import.meta.env.VITE_API_URL || "http://localhost:3003/api";
+                import.meta.env.VITE_API_URL || "http://localhost:3005/api";
             const healthUrl = `${API_BASE_URL.replace("/api", "")}/health`;
 
             const response = await fetch(healthUrl, {

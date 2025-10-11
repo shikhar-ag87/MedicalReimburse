@@ -185,8 +185,24 @@ router.post(
         } = req.body;
 
         const commenterId = req.user?.userId;
-        const commenterName = req.user?.name || "Unknown";
+        let commenterName = req.user?.name;
         const commenterRole = req.user?.role || "admin";
+
+        // If name is not in token (old tokens), fetch from database
+        if (!commenterName && commenterId) {
+            try {
+                const db = await getDatabase();
+                const userRepo = db.getUserRepository();
+                const user = await userRepo.findById(commenterId);
+                commenterName = user?.name || "Admin User";
+            } catch (error) {
+                logger.warn("Could not fetch user name for commenter", {
+                    commenterId,
+                    error,
+                });
+                commenterName = "Admin User";
+            }
+        }
 
         const db = await getDatabase();
         const client = (db as SupabaseConnection).getClient();
@@ -196,7 +212,7 @@ router.post(
                 application_id: applicationId,
                 review_id: reviewId,
                 commenter_id: commenterId,
-                commenter_name: commenterName,
+                commenter_name: commenterName || "Admin User",
                 commenter_role: commenterRole,
                 comment_type: commentType,
                 comment_text: commentText,
@@ -549,24 +565,174 @@ router.get(
         const db = await getDatabase();
         const client = (db as SupabaseConnection).getClient();
 
+        // Get eligibility check without join (to avoid schema cache issues)
         const { data, error } = await client
             .from("eligibility_checks")
-            .select(
-                `
-                *,
-                checker:admin_users!checker_id(name, email, role)
-            `
-            )
+            .select("*")
             .eq("application_id", applicationId)
             .order("checked_at", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
-        if (error && error.code !== "PGRST116") throw error;
+        if (error && error.code !== "PGRST116") {
+            logger.error("Error fetching eligibility check:", error);
+            throw error;
+        }
+
+        // If we have data, fetch checker info separately
+        if (data && data.checker_id) {
+            const { data: checker } = await client
+                .from("admin_users")
+                .select("name, email, role")
+                .eq("id", data.checker_id)
+                .single();
+            
+            if (checker) {
+                data.checker = checker;
+            }
+        }
 
         res.json({
             success: true,
             data: data || null,
+        });
+    })
+);
+
+/**
+ * Update (or upsert) eligibility check for an application
+ * PATCH /api/reviews/eligibility/:applicationId
+ */
+router.patch(
+    "/eligibility/:applicationId",
+    asyncHandler(async (req: Request, res: Response) => {
+        const { applicationId } = req.params;
+        const {
+            isScStObcVerified,
+            categoryProofValid,
+            employeeIdVerified,
+            medicalCardValid,
+            relationshipVerified,
+            hasPendingClaims,
+            isWithinLimits,
+            isTreatmentCovered,
+            priorPermissionStatus,
+            eligibilityStatus,
+            ineligibilityReasons,
+            conditions,
+            notes,
+        } = req.body;
+
+        const checkerId = req.user?.userId;
+
+        const db = await getDatabase();
+        const client = (db as SupabaseConnection).getServiceClient(); // Use service client to bypass RLS
+
+        // Validate that the application exists first
+        const { data: application, error: appError } = await client
+            .from("medical_applications")
+            .select("id")
+            .eq("id", applicationId)
+            .maybeSingle();
+
+        if (appError) {
+            logger.error("Error checking application existence:", appError);
+            throw new Error("Failed to verify application");
+        }
+
+        if (!application) {
+            logger.warn(`Application ${applicationId} not found`);
+            res.status(404).json({
+                success: false,
+                error: "Application not found. Please ensure the application exists before submitting a review.",
+            });
+            return;
+        }
+
+        // Find latest eligibility check for this application by this checker
+        const { data: existing, error: fetchError } = await client
+            .from("eligibility_checks")
+            .select("*")
+            .eq("application_id", applicationId)
+            .eq("checker_id", checkerId)
+            .order("checked_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (fetchError && fetchError.code !== "PGRST116") {
+            logger.error("Error fetching existing eligibility check:", fetchError);
+            throw fetchError;
+        }
+
+        if (!existing) {
+            // No existing record -> insert
+            const { data, error } = await client
+                .from("eligibility_checks")
+                .insert({
+                    application_id: applicationId,
+                    checker_id: checkerId,
+                    is_sc_st_obc_verified: isScStObcVerified,
+                    category_proof_valid: categoryProofValid,
+                    employee_id_verified: employeeIdVerified,
+                    medical_card_valid: medicalCardValid,
+                    relationship_verified: relationshipVerified,
+                    has_pending_claims: hasPendingClaims,
+                    is_within_limits: isWithinLimits,
+                    is_treatment_covered: isTreatmentCovered,
+                    prior_permission_status: priorPermissionStatus,
+                    eligibility_status: eligibilityStatus,
+                    ineligibility_reasons: ineligibilityReasons || [],
+                    conditions: conditions || [],
+                    notes,
+                })
+                .select()
+                .single();
+
+            if (error) {
+                logger.error("Error creating eligibility check:", error);
+                throw error;
+            }
+
+            res.json({
+                success: true,
+                message: "Eligibility check created",
+                data,
+            });
+            return;
+        }
+
+        // Update existing record
+        const { data, error } = await client
+            .from("eligibility_checks")
+            .update({
+                is_sc_st_obc_verified: isScStObcVerified,
+                category_proof_valid: categoryProofValid,
+                employee_id_verified: employeeIdVerified,
+                medical_card_valid: medicalCardValid,
+                relationship_verified: relationshipVerified,
+                has_pending_claims: hasPendingClaims,
+                is_within_limits: isWithinLimits,
+                is_treatment_covered: isTreatmentCovered,
+                prior_permission_status: priorPermissionStatus,
+                eligibility_status: eligibilityStatus,
+                ineligibility_reasons: ineligibilityReasons || [],
+                conditions: conditions || [],
+                notes,
+                // updated_at removed - Supabase schema cache doesn't recognize it yet
+            })
+            .eq("id", existing.id)
+            .select()
+            .single();
+
+        if (error) {
+            logger.error("Error updating eligibility check:", error);
+            throw error;
+        }
+
+        res.json({
+            success: true,
+            message: "Eligibility check updated",
+            data,
         });
     })
 );

@@ -46,12 +46,48 @@ export function createApp(): express.Express {
 
     // Security middleware
     app.use(helmet());
+    
+    // CORS configuration - allow multiple origins
+    const allowedOrigins = process.env.ALLOWED_ORIGINS
+        ? process.env.ALLOWED_ORIGINS.split(",")
+        : [
+              "http://localhost:5173",
+              "http://localhost:3000",
+              "http://127.0.0.1:5173",
+          ];
+
     app.use(
         cors({
-            origin: process.env.FRONTEND_URL || "*",
+            origin: (origin, callback) => {
+                // Allow requests with no origin (like mobile apps or curl requests)
+                if (!origin) return callback(null, true);
+
+                // Check if origin matches any pattern (including wildcards for local network)
+                const isAllowed =
+                    allowedOrigins.includes(origin) ||
+                    allowedOrigins.includes("*") ||
+                    // Allow any localhost port
+                    origin.startsWith("http://localhost:") ||
+                    origin.startsWith("http://127.0.0.1:") ||
+                    // Allow local network IPs (10.x.x.x, 192.168.x.x)
+                    /^http:\/\/(10\.|192\.168\.)[\d.]+:\d+$/.test(origin);
+
+                if (isAllowed) {
+                    callback(null, true);
+                } else {
+                    callback(
+                        new Error(
+                            `CORS policy: Origin ${origin} is not allowed`
+                        )
+                    );
+                }
+            },
             credentials: true,
+            methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allowedHeaders: ["Content-Type", "Authorization"],
         })
     );
+    
     app.use(compression());
 
     // Logging middleware

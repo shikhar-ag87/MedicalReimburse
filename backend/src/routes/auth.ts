@@ -9,9 +9,14 @@ import { CreateUserData, CreateAuditLogData, User } from "../types/database";
 const router = express.Router();
 
 // Generate JWT token
-const generateToken = (userId: string, email: string, role: string): string => {
+const generateToken = (
+    userId: string,
+    email: string,
+    role: string,
+    name?: string
+): string => {
     return jwt.sign(
-        { userId, email, role },
+        { userId, email, role, name },
         process.env.JWT_SECRET || "your-secret-key",
         { expiresIn: "7d" }
     );
@@ -109,7 +114,8 @@ router.post(
             const token = generateToken(
                 newUser.id,
                 newUser.email,
-                newUser.role
+                newUser.role,
+                newUser.name
             );
 
             // Log registration
@@ -214,7 +220,7 @@ router.post(
             await userRepo.updateLastLogin(user.id);
 
             // Generate token
-            const token = generateToken(user.id, user.email, user.role);
+            const token = generateToken(user.id, user.email, user.role, user.name);
 
             // Log login
             logger.info(`User logged in: ${email}`, {

@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     return {
         plugins: [react()],
         optimizeDeps: {
-            exclude: ["lucide-react"],
+            include: ["lucide-react"],
         },
         server: {
             port: parseInt(env.FRONTEND_PORT) || 5173,

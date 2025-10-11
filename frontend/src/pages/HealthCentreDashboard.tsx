@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { Heart, Edit3, Save, ArrowLeft, LogOut } from "lucide-react";
+import { Heart, Edit3, Save, ArrowLeft, LogOut, FileText } from "lucide-react";
 import { adminService } from "../services/admin";
+import { apiService } from "../services/api";
 import type { AdminApplication } from "../services/admin";
 
 const HealthCentreDashboard = () => {
@@ -14,6 +15,7 @@ const HealthCentreDashboard = () => {
     const [remarks, setRemarks] = useState("");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<"under_review" | "back_to_obc" | "approved" | "all">("under_review");
 
     useEffect(() => {
         // Wait for auth to load
@@ -28,19 +30,33 @@ const HealthCentreDashboard = () => {
         }
 
         fetchApplications();
-    }, [user, navigate, authLoading]);
+    }, [user, navigate, authLoading, activeTab]);
 
     const fetchApplications = async () => {
         try {
             setLoading(true);
             setError(null);
-            // Health centre sees applications that are under review
-            const response = await adminService.getAllApplications({
-                status: "under_review",
-                sortBy: "submittedAt",
-                sortOrder: "desc",
-            });
-            setClaims(response.applications);
+            // Health centre sees applications that are under review, back_to_obc, or approved
+            if (activeTab === "all") {
+                // Fetch all applications for Health Centre
+                const response = await adminService.getAllApplications({
+                    sortBy: "submittedAt",
+                    sortOrder: "desc",
+                });
+                // Filter to show only relevant statuses for Health Centre
+                const filteredApplications = response.applications.filter(
+                    (app) => ["under_review", "back_to_obc", "approved"].includes(app.status)
+                );
+                setClaims(filteredApplications);
+            } else {
+                // Fetch applications with specific status
+                const response = await adminService.getAllApplications({
+                    status: activeTab,
+                    sortBy: "submittedAt",
+                    sortOrder: "desc",
+                });
+                setClaims(response.applications);
+            }
         } catch (error: any) {
             setError(error.message || "Failed to fetch applications");
             console.error("Error fetching applications:", error);
@@ -49,46 +65,24 @@ const HealthCentreDashboard = () => {
         }
     };
 
-    const handleViewClaim = (claim: any) => {
-        const claimDetails = {
-            ...claim,
-            expenses: [
-                {
-                    id: "1",
-                    billNo: "B001",
-                    date: "2024-01-10",
-                    description: "General Consultation",
-                    category: "OPD",
-                    amountClaimed: 3000,
-                    amountPassed: 3000,
-                    remarks: "",
-                },
-                {
-                    id: "2",
-                    billNo: "B002",
-                    date: "2024-01-11",
-                    description: "Blood Tests",
-                    category: "Tests",
-                    amountClaimed: 2500,
-                    amountPassed: 2000,
-                    remarks: "Standard govt. rate applied",
-                },
-                {
-                    id: "3",
-                    billNo: "B003",
-                    date: "2024-01-12",
-                    description: "Medicine",
-                    category: "OPD",
-                    amountClaimed: 3000,
-                    amountPassed: 2500,
-                    remarks: "Generic equivalent rate",
-                },
-            ],
-        };
-
-        setSelectedClaim(claimDetails);
-        setEditingExpenses([...claimDetails.expenses]);
-        setRemarks("");
+    const handleViewClaim = async (claim: any) => {
+        try {
+            setLoading(true);
+            setError(null);
+            const resp = await apiService.get<any>(`/applications/${claim.id}`);
+            if (!resp.success || !resp.data) {
+                throw new Error(resp.message || "Failed to load claim details");
+            }
+            const { application, expenses, documents } = resp.data;
+            setSelectedClaim({ ...application, expenses, documents: documents || [] });
+            setEditingExpenses([...(expenses || [])]);
+            setRemarks("");
+        } catch (e: any) {
+            console.error("Error loading claim details:", e);
+            setError(e.message || "Failed to load claim details");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const updateExpenseAmount = (
@@ -103,35 +97,29 @@ const HealthCentreDashboard = () => {
         );
     };
 
-    const handleApprove = () => {
-        // Update the claim with new amounts and remarks
-        const updatedClaim = {
-            ...selectedClaim,
-            expenses: editingExpenses,
-            healthCentreRemarks: remarks,
-            status: "approved",
-            finalAmount: editingExpenses.reduce(
-                (total, expense) => total + (expense.amountPassed || 0),
-                0
-            ),
-        };
-
-        setClaims(
-            claims.map((claim) =>
-                claim.id === selectedClaim.id
-                    ? {
-                          ...claim,
-                          status: "approved",
-                          finalAmount: updatedClaim.finalAmount,
-                      }
-                    : claim
-            )
-        );
-
-        setSelectedClaim(null);
-        alert(
-            "Claim approved and forwarded to Administration for final processing!"
-        );
+    const handleApprove = async () => {
+        try {
+            setError(null);
+            console.log("🏥 Health Centre approving:", selectedClaim.id);
+            
+            // Calculate total approved amount from edited expenses
+            const totalApprovedAmount = getTotalPassed();
+            console.log("💰 Total approved amount:", totalApprovedAmount);
+            
+            // Set status to 'back_to_obc' so OBC can do final review
+            await adminService.updateApplicationStatus(
+                selectedClaim.id,
+                "back_to_obc",
+                remarks || "Reviewed by Health Centre and sent back to OBC for final review",
+                totalApprovedAmount  // Pass the approved amount!
+            );
+            console.log("✅ Approved and sent back to OBC");
+            setSelectedClaim(null);
+            alert("Claim reviewed and sent back to OBC Cell for final review!");
+        } catch (e: any) {
+            console.error("❌ Approval failed:", e);
+            setError(e.message || "Failed to approve and forward claim");
+        }
     };
 
     const getTotalClaimed = () => {
@@ -210,7 +198,7 @@ const HealthCentreDashboard = () => {
                                                 Relationship:
                                             </span>
                                             <p className="font-medium">
-                                                {selectedClaim.relationship}
+                                                {selectedClaim.relationshipWithEmployee}
                                             </p>
                                         </div>
                                     </div>
@@ -261,7 +249,7 @@ const HealthCentreDashboard = () => {
                                                             }
                                                         >
                                                             <td className="px-3 py-2">
-                                                                {expense.billNo}
+                                                                {expense.billNumber}
                                                             </td>
                                                             <td className="px-3 py-2">
                                                                 {
@@ -351,6 +339,49 @@ const HealthCentreDashboard = () => {
                                                 </tr>
                                             </tfoot>
                                         </table>
+                                    </div>
+                                </div>
+
+                                {/* Supporting Documents Section */}
+                                <div className="bg-white rounded-lg border border-gray-200 p-4">
+                                    <h3 className="font-semibold text-gray-900 mb-4">
+                                        Supporting Documents
+                                    </h3>
+                                    <div className="space-y-2">
+                                        {selectedClaim.documents && selectedClaim.documents.length > 0 ? (
+                                            selectedClaim.documents.map((doc: any, index: number) => (
+                                                <div
+                                                    key={doc.id || index}
+                                                    className="flex items-center justify-between p-3 bg-gray-50 rounded-md hover:bg-gray-100"
+                                                >
+                                                    <div className="flex items-center space-x-3">
+                                                        <FileText className="w-5 h-5 text-blue-600" />
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-900">
+                                                                {doc.fileName || doc.file_name || `Document ${index + 1}`}
+                                                            </p>
+                                                            <p className="text-xs text-gray-500">
+                                                                {doc.fileType || doc.file_type || 'Unknown type'} • 
+                                                                {doc.fileSize ? ` ${(doc.fileSize / 1024).toFixed(2)} KB` : 
+                                                                 doc.file_size ? ` ${(doc.file_size / 1024).toFixed(2)} KB` : ' Size unknown'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <a
+                                                        href={doc.filePath || doc.file_path}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                                    >
+                                                        View
+                                                    </a>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-sm text-gray-500 text-center py-4">
+                                                No documents uploaded
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -492,6 +523,52 @@ const HealthCentreDashboard = () => {
                 </div>
 
                 <div className="p-6">
+                    {/* Status Tabs */}
+                    <div className="mb-6 border-b border-gray-200">
+                        <div className="flex space-x-4">
+                            <button
+                                onClick={() => setActiveTab("under_review")}
+                                className={`px-4 py-2 font-medium transition-colors ${
+                                    activeTab === "under_review"
+                                        ? "text-blue-600 border-b-2 border-blue-600"
+                                        : "text-gray-600 hover:text-gray-800"
+                                }`}
+                            >
+                                Pending Review
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("back_to_obc")}
+                                className={`px-4 py-2 font-medium transition-colors ${
+                                    activeTab === "back_to_obc"
+                                        ? "text-yellow-600 border-b-2 border-yellow-600"
+                                        : "text-gray-600 hover:text-gray-800"
+                                }`}
+                            >
+                                Returned to OBC
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("approved")}
+                                className={`px-4 py-2 font-medium transition-colors ${
+                                    activeTab === "approved"
+                                        ? "text-green-600 border-b-2 border-green-600"
+                                        : "text-gray-600 hover:text-gray-800"
+                                }`}
+                            >
+                                Approved
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("all")}
+                                className={`px-4 py-2 font-medium transition-colors ${
+                                    activeTab === "all"
+                                        ? "text-purple-600 border-b-2 border-purple-600"
+                                        : "text-gray-600 hover:text-gray-800"
+                                }`}
+                            >
+                                All
+                            </button>
+                        </div>
+                    </div>
+
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -594,9 +671,21 @@ const HealthCentreDashboard = () => {
                                             {claim.totalAmountClaimed.toLocaleString()}
                                         </td>
                                         <td className="px-4 py-3">
-                                            <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
-                                                Medical Review
-                                            </span>
+                                            {claim.status === "under_review" && (
+                                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                                    Under Review
+                                                </span>
+                                            )}
+                                            {claim.status === "back_to_obc" && (
+                                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800">
+                                                    Returned to OBC
+                                                </span>
+                                            )}
+                                            {claim.status === "approved" && (
+                                                <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                                                    Approved
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3 text-center">
                                             <button

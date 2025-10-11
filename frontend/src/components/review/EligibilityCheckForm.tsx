@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     CheckCircle,
     XCircle,
@@ -12,6 +12,7 @@ interface EligibilityCheckFormProps {
     onSubmit: (data: EligibilityCheckData) => void;
     onCancel: () => void;
     loading?: boolean;
+    defaults?: Partial<EligibilityCheckData>;
 }
 
 export interface EligibilityCheckData {
@@ -34,6 +35,7 @@ const EligibilityCheckForm: React.FC<EligibilityCheckFormProps> = ({
     onSubmit,
     onCancel,
     loading,
+    defaults,
 }) => {
     const [formData, setFormData] = useState<EligibilityCheckData>({
         isScStObcVerified: false,
@@ -50,6 +52,16 @@ const EligibilityCheckForm: React.FC<EligibilityCheckFormProps> = ({
         conditions: [],
         notes: "",
     });
+
+    useEffect(() => {
+        if (defaults) {
+            setFormData((prev) => ({
+                ...prev,
+                ...defaults,
+            }));
+        }
+        // rerun when defaults object identity changes
+    }, [defaults]);
 
     const [newReason, setNewReason] = useState("");
     const [newCondition, setNewCondition] = useState("");

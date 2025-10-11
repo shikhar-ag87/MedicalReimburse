@@ -29,11 +29,18 @@ export interface DashboardStats {
     };
 }
 
+export interface ApplicationReviewSummary {
+    totalReviews: number;
+    lastDecision?: string;
+    lastReviewedAt?: string;
+}
+
 export interface AdminApplication extends Application {
     expenseCount: number;
     documentCount: number;
     totalExpenseClaimed: number;
     totalExpensePassed: number;
+    reviewSummary?: ApplicationReviewSummary;
 }
 
 export interface SystemSettings {

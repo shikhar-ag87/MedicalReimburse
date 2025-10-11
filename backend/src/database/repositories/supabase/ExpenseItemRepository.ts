@@ -20,7 +20,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
                 bill_date: data.billDate,
                 description: data.description,
                 amount_claimed: data.amountClaimed,
-                amount_passed: data.amountPassed || 0,
+                amount_approved: data.amountPassed || 0,
             })
             .select()
             .single();
@@ -34,7 +34,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
             billDate: new Date(result.bill_date),
             description: result.description,
             amountClaimed: parseFloat(result.amount_claimed),
-            amountPassed: parseFloat(result.amount_passed),
+            amountPassed: parseFloat(result.amount_approved || 0),
             createdAt: new Date(result.created_at),
             updatedAt: new Date(result.updated_at),
         };
@@ -60,7 +60,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
             billDate: new Date(data.bill_date),
             description: data.description,
             amountClaimed: parseFloat(data.amount_claimed),
-            amountPassed: parseFloat(data.amount_passed),
+            amountPassed: parseFloat(data.amount_approved || 0),
             createdAt: new Date(data.created_at),
             updatedAt: new Date(data.updated_at),
         };
@@ -84,7 +84,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
             billDate: new Date(item.bill_date),
             description: item.description,
             amountClaimed: parseFloat(item.amount_claimed),
-            amountPassed: parseFloat(item.amount_passed),
+            amountPassed: parseFloat(item.amount_approved || 0),
             createdAt: new Date(item.created_at),
             updatedAt: new Date(item.updated_at),
         }));
@@ -100,7 +100,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
         const client = this.connection.getClient();
         const { data, error } = await client
             .from("expense_items")
-            .select("amount_claimed, amount_passed")
+            .select("amount_claimed, amount_approved")
             .eq("application_id", applicationId);
 
         if (error) throw error;
@@ -110,7 +110,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
             0
         );
         const passed = data.reduce(
-            (sum, item) => sum + parseFloat(item.amount_passed || 0),
+            (sum, item) => sum + parseFloat(item.amount_approved || 0),
             0
         );
 
@@ -130,7 +130,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
         if (data.amountClaimed !== undefined)
             updateData.amount_claimed = data.amountClaimed;
         if (data.amountPassed !== undefined)
-            updateData.amount_passed = data.amountPassed;
+            updateData.amount_approved = data.amountPassed;
 
         const { data: result, error } = await client
             .from("expense_items")
@@ -151,7 +151,7 @@ export class SupabaseExpenseItemRepository implements ExpenseItemRepository {
             billDate: new Date(result.bill_date),
             description: result.description,
             amountClaimed: parseFloat(result.amount_claimed),
-            amountPassed: parseFloat(result.amount_passed),
+            amountPassed: parseFloat(result.amount_approved || 0),
             createdAt: new Date(result.created_at),
             updatedAt: new Date(result.updated_at),
         };

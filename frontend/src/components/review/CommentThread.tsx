@@ -13,31 +13,32 @@ interface CommentThreadProps {
 interface ReviewComment {
     id: string;
     application_id: string;
-    reviewer_id: string;
-    reviewer_name?: string;
-    reviewer_role: string;
+    commenter_id: string;
+    commenter_name?: string;
+    commenter_role?: string;
     comment_text: string;
     comment_type:
+        | "general"
+        | "question"
+        | "concern"
+        | "recommendation"
         | "inquiry"
         | "clarification"
-        | "observation"
-        | "recommendation";
+        | "observation";
     is_resolved: boolean;
+    is_internal?: boolean;
     created_at: string;
 }
 
 const CommentThread: React.FC<CommentThreadProps> = ({
-    applicationId,
     comments,
     onAddComment,
     onResolveComment,
-    currentUserId,
-    currentUserRole,
 }) => {
     const [newComment, setNewComment] = useState("");
     const [commentType, setCommentType] = useState<
-        "inquiry" | "clarification" | "observation" | "recommendation"
-    >("observation");
+        "general" | "question" | "concern" | "recommendation"
+    >("general");
     const [isInternal, setIsInternal] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showResolved, setShowResolved] = useState(false);
@@ -50,7 +51,7 @@ const CommentThread: React.FC<CommentThreadProps> = ({
         try {
             await onAddComment(newComment.trim(), isInternal);
             setNewComment("");
-            setCommentType("observation");
+            setCommentType("general");
             setIsInternal(false);
         } catch (error) {
             console.error("Error adding comment:", error);
@@ -78,17 +79,23 @@ const CommentThread: React.FC<CommentThreadProps> = ({
 
     const getCommentTypeColor = (type: string) => {
         const colors = {
+            general: "bg-gray-100 text-gray-800 border-gray-300",
+            question: "bg-blue-100 text-blue-800 border-blue-300",
+            concern: "bg-yellow-100 text-yellow-800 border-yellow-300",
+            recommendation: "bg-green-100 text-green-800 border-green-300",
+            // Legacy types for backward compatibility
             inquiry: "bg-blue-100 text-blue-800 border-blue-300",
             clarification: "bg-yellow-100 text-yellow-800 border-yellow-300",
             observation: "bg-purple-100 text-purple-800 border-purple-300",
-            recommendation: "bg-green-100 text-green-800 border-green-300",
         };
-        return colors[type as keyof typeof colors] || colors.observation;
+        return colors[type as keyof typeof colors] || colors.general;
     };
 
     const getRoleBadgeColor = (role: string) => {
         const colors = {
             admin: "bg-indigo-100 text-indigo-800",
+            obc: "bg-blue-100 text-blue-800",
+            health: "bg-teal-100 text-teal-800",
             medical_officer: "bg-teal-100 text-teal-800",
             super_admin: "bg-red-100 text-red-800",
         };
@@ -102,7 +109,8 @@ const CommentThread: React.FC<CommentThreadProps> = ({
             <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900 flex items-center">
                     <MessageCircle className="w-5 h-5 mr-2 text-blue-600" />
-                    Review Comments ({comments.length})
+                    Review Comments (
+                    {comments.filter((c) => !c.is_resolved).length})
                 </h3>
                 <label className="flex items-center space-x-2 text-sm cursor-pointer">
                     <input
@@ -126,9 +134,9 @@ const CommentThread: React.FC<CommentThreadProps> = ({
                     </label>
                     <div className="flex flex-wrap gap-2">
                         {[
-                            "inquiry",
-                            "clarification",
-                            "observation",
+                            "general",
+                            "question",
+                            "concern",
                             "recommendation",
                         ].map((type) => (
                             <label
@@ -219,18 +227,20 @@ const CommentThread: React.FC<CommentThreadProps> = ({
                                 </div>
                                 <div>
                                     <p className="text-sm font-medium text-gray-900">
-                                        {comment.reviewer_name || "Reviewer"}
+                                        {comment.commenter_name || "Reviewer"}
                                     </p>
                                     <div className="flex items-center space-x-2 mt-1">
-                                        <span
-                                            className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(
-                                                comment.reviewer_role
-                                            )}`}
-                                        >
-                                            {comment.reviewer_role
-                                                .replace("_", " ")
-                                                .toUpperCase()}
-                                        </span>
+                                        {comment.commenter_role && (
+                                            <span
+                                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${getRoleBadgeColor(
+                                                    comment.commenter_role
+                                                )}`}
+                                            >
+                                                {comment.commenter_role
+                                                    .replace("_", " ")
+                                                    .toUpperCase()}
+                                            </span>
+                                        )}
                                         <span
                                             className={`px-2 py-0.5 rounded-full border text-xs font-medium ${getCommentTypeColor(
                                                 comment.comment_type

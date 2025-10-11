@@ -157,15 +157,13 @@ const AdminLogin = () => {
                         </h4>
                         <div className="text-xs text-gray-600 space-y-1">
                             <p>
-                                <strong>OBC Admin:</strong> obc_admin / password
+                                <strong>OBC Admin:</strong> obc@jnu.ac.in / obc123
                             </p>
                             <p>
-                                <strong>Health Centre:</strong> health_admin /
-                                password
+                                <strong>Health Centre:</strong> health@jnu.ac.in / health123
                             </p>
                             <p>
-                                <strong>Super Admin:</strong> super_admin /
-                                password
+                                <strong>Super Admin:</strong> admin@jnu.ac.in / super123
                             </p>
                         </div>
                     </div>

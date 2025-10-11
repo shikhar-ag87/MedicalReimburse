@@ -4,6 +4,7 @@ import { asyncHandler } from "../middleware/errorHandler";
 import { getDatabase } from "../database/connection";
 import { logger } from "../utils/logger";
 import { CreateAuditLogData } from "../types/database";
+import { SupabaseConnection } from "../database/providers/supabase";
 
 const router = express.Router();
 
@@ -80,16 +81,17 @@ router.get(
             const reviewApplications = await applicationRepo.findByStatus(
                 "under_review"
             );
+            
+            // Get all applications for recent activity (for Super Admin dashboard)
+            const allApplications = await applicationRepo.findAll();
 
             const dashboardData = {
                 applications: {
                     ...applicationStats,
                     pendingCount: pendingApplications.length,
                     underReviewCount: reviewApplications.length,
-                    recentApplications: [
-                        ...pendingApplications,
-                        ...reviewApplications,
-                    ]
+                    // Show all recent applications sorted by date (not just pending/under_review)
+                    recentApplications: allApplications
                         .sort(
                             (a, b) =>
                                 new Date(b.submittedAt).getTime() -
@@ -174,6 +176,68 @@ router.get(
                 endIndex
             );
 
+            // Collect application IDs for aggregated lookups
+            const applicationIds = paginatedApplications.map((app) => app.id);
+
+            // Prepare review summaries
+            const reviewSummaryMap: Record<
+                string,
+                {
+                    totalReviews: number;
+                    lastDecision?: string;
+                    lastReviewedAt?: string;
+                }
+            > = {};
+
+            if (applicationIds.length > 0) {
+                try {
+                    const supabaseClient = (db as SupabaseConnection).getClient();
+
+                    const { data: reviewRows, error: reviewError } =
+                        await supabaseClient
+                            .from("application_reviews")
+                            .select(
+                                "application_id, decision, review_completed_at"
+                            )
+                            .in("application_id", applicationIds);
+
+                    if (reviewError && reviewError.code !== "PGRST116") {
+                        throw reviewError;
+                    }
+
+                    reviewRows?.forEach((row) => {
+                        const existing = reviewSummaryMap[row.application_id] || {
+                            totalReviews: 0,
+                        };
+
+                        existing.totalReviews += 1;
+
+                        const currentTimestamp = row.review_completed_at
+                            ? new Date(row.review_completed_at).getTime()
+                            : null;
+                        const existingTimestamp = existing.lastReviewedAt
+                            ? new Date(existing.lastReviewedAt).getTime()
+                            : null;
+
+                        if (
+                            currentTimestamp !== null &&
+                            (existingTimestamp === null ||
+                                currentTimestamp > existingTimestamp)
+                        ) {
+                            existing.lastReviewedAt = row.review_completed_at;
+                            existing.lastDecision = row.decision;
+                        }
+
+                        reviewSummaryMap[row.application_id] = existing;
+                    });
+                } catch (summaryError) {
+                    logger.warn(
+                        "Failed to load review summaries for applications",
+                        summaryError
+                    );
+                }
+            }
+
             // Get additional details for each application
             const enrichedApplications = await Promise.all(
                 paginatedApplications.map(async (app) => {
@@ -199,6 +263,9 @@ router.get(
                             (sum, exp) => sum + exp.amountPassed,
                             0
                         ),
+                        reviewSummary:
+                            reviewSummaryMap[app.id] ||
+                            ({ totalReviews: 0 } as const),
                     };
                 })
             );

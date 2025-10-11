@@ -43,9 +43,11 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE TYPE application_status AS ENUM (
     'pending', 
     'under_review', 
+    'back_to_obc',
     'approved', 
     'rejected', 
-    'completed'
+    'completed',
+    'reimbursed'
 );
 
 CREATE TYPE treatment_type AS ENUM (

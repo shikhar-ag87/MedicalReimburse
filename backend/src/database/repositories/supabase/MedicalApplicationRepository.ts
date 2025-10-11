@@ -44,7 +44,7 @@ export class SupabaseMedicalApplicationRepository
             health_insurance: data.healthInsurance,
             insurance_amount: data.insuranceAmount,
             total_amount_claimed: data.totalAmountClaimed || 0,
-            total_amount_passed: data.totalAmountPassed || 0,
+            approved_amount: data.totalAmountPassed || 0,
             bank_name: data.bankName,
             branch_address: data.branchAddress,
             account_number: data.accountNumber,
@@ -137,7 +137,9 @@ export class SupabaseMedicalApplicationRepository
         // Map update data to database columns
         if (data.status) updateData.status = data.status;
         if (data.totalAmountPassed !== undefined)
-            updateData.total_amount_passed = data.totalAmountPassed;
+            updateData.approved_amount = data.totalAmountPassed;
+        if (data.totalAmountClaimed !== undefined)
+            updateData.total_amount_claimed = data.totalAmountClaimed;
 
         const { data: result, error } = await client
             .from("medical_applications")
@@ -233,37 +235,64 @@ export class SupabaseMedicalApplicationRepository
         reviewerId?: string,
         comments?: string
     ): Promise<MedicalApplication | null> {
-        const client = this.db.getClient();
+        // Use service client for admin operations to bypass RLS
+        const client = this.db.getServiceClient ? this.db.getServiceClient() : this.db.getClient();
 
+        // Only update core fields that exist in the Supabase schema
+        // reviewed_by, reviewed_at, and admin_remarks are tracked elsewhere (application_reviews table)
         const updateData: any = {
             status,
             updated_at: new Date().toISOString(),
         };
 
-        if (reviewerId) {
-            updateData.reviewed_by = reviewerId;
-            updateData.reviewed_at = new Date().toISOString();
-        }
+        console.log("🔄 UPDATE STATUS - ID:", id, "| New Status:", status);
 
-        if (comments) {
-            updateData.review_comments = comments;
+        // First, verify the row exists and check RLS
+        const { data: existingCheck, error: checkError } = await client
+            .from("medical_applications")
+            .select("id, status")
+            .eq("id", id);
+
+        console.log("📋 Pre-update check:", { 
+            found: existingCheck?.length, 
+            currentStatus: existingCheck?.[0]?.status,
+            checkError: checkError?.message,
+            usingServiceClient: !!this.db.getServiceClient
+        });
+
+        if (!existingCheck || existingCheck.length === 0) {
+            console.error("❌ CRITICAL: Application not found or RLS blocking access");
+            logger.error("Application not accessible for update:", { id, checkError });
+            throw new Error("Application not found or access denied. Check RLS policies.");
         }
 
         const { data: result, error } = await client
             .from("medical_applications")
             .update(updateData)
             .eq("id", id)
-            .select("*")
-            .single();
+            .select("*");
+
+        console.log("✅ Update result:", { 
+            rowsUpdated: result?.length, 
+            newStatus: result?.[0]?.status,
+            error: error?.message 
+        });
 
         if (error) {
+            console.error("❌ Update error:", error);
             logger.error("Failed to update application status:", error);
             throw new Error(
                 `Failed to update application status: ${error.message}`
             );
         }
 
-        return this.mapFromDatabase(result);
+        if (!result || result.length === 0) {
+            console.error("❌ No rows updated - likely RLS policy issue");
+            logger.error("No application found with id:", id);
+            return null;
+        }
+
+        return this.mapFromDatabase(result[0]);
     }
 
     async getApplicationsForReview(): Promise<MedicalApplication[]> {
@@ -277,14 +306,15 @@ export class SupabaseMedicalApplicationRepository
         rejected: number;
         completed: number;
     }> {
-        const [total, pending, approved, rejected, completed] =
-            await Promise.all([
-                this.count(),
-                this.count({ status: "pending" }),
-                this.count({ status: "approved" }),
-                this.count({ status: "rejected" }),
-                this.count({ status: "completed" }),
-            ]);
+        // Get all applications to count statuses manually
+        const allApplications = await this.findAll();
+        
+        const total = allApplications.length;
+        const pending = allApplications.filter(a => a.status === "pending").length;
+        // Count both "approved" (awaiting Super Admin) and "reimbursed" (approved by Super Admin)
+        const approved = allApplications.filter(a => a.status === "approved" || a.status === "reimbursed").length;
+        const rejected = allApplications.filter(a => a.status === "rejected").length;
+        const completed = allApplications.filter(a => a.status === "completed" || a.status === "reimbursed").length;
 
         return { total, pending, approved, rejected, completed };
     }
@@ -315,7 +345,7 @@ export class SupabaseMedicalApplicationRepository
             emergencyTreatment: data.emergency_treatment,
             healthInsurance: data.health_insurance,
             totalAmountClaimed: parseFloat(data.total_amount_claimed) || 0,
-            totalAmountPassed: parseFloat(data.total_amount_passed) || 0,
+            totalAmountPassed: parseFloat(data.approved_amount) || 0,
             bankName: data.bank_name,
             branchAddress: data.branch_address,
             accountNumber: data.account_number,

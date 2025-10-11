@@ -40,7 +40,7 @@ export class SupabaseApplicationDocumentRepository
             fileSize: result.file_size,
             mimeType: result.mime_type,
             documentType: result.document_type,
-            uploadedAt: new Date(result.uploaded_at),
+            uploadedAt: new Date(result.upload_timestamp),
         };
     }
 
@@ -66,7 +66,7 @@ export class SupabaseApplicationDocumentRepository
             fileSize: data.file_size,
             mimeType: data.mime_type,
             documentType: data.document_type,
-            uploadedAt: new Date(data.uploaded_at),
+            uploadedAt: new Date(data.upload_timestamp),
         };
     }
 
@@ -83,7 +83,7 @@ export class SupabaseApplicationDocumentRepository
             query = query.eq("document_type", filters.documentType);
         }
 
-        const { data, error } = await query.order("uploaded_at", {
+        const { data, error } = await query.order("upload_timestamp", {
             ascending: false,
         });
         if (error) throw error;
@@ -97,7 +97,7 @@ export class SupabaseApplicationDocumentRepository
             fileSize: item.file_size,
             mimeType: item.mime_type,
             documentType: item.document_type,
-            uploadedAt: new Date(item.uploaded_at),
+            uploadedAt: new Date(item.upload_timestamp),
         }));
     }
 
@@ -138,7 +138,7 @@ export class SupabaseApplicationDocumentRepository
             fileSize: result.file_size,
             mimeType: result.mime_type,
             documentType: result.document_type,
-            uploadedAt: new Date(result.uploaded_at),
+            uploadedAt: new Date(result.upload_timestamp),
         };
     }
 

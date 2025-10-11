@@ -58,9 +58,11 @@ export class MockDataGenerator {
             status: faker.helpers.arrayElement([
                 "pending",
                 "under_review",
+                "back_to_obc",
                 "approved",
                 "rejected",
                 "completed",
+                "reimbursed",
             ]),
             applicationNumber: `MR-${new Date().getFullYear()}-${faker.string.numeric(
                 4

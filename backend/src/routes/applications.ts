@@ -616,12 +616,9 @@ router.patch(
             const userRepo = db.getUserRepository();
             const auditRepo = db.getAuditLogRepository();
 
-            // Check if user is admin
-            const user = await userRepo.findById(userId);
-            if (
-                !user ||
-                !["admin", "super_admin", "medical_officer"].includes(user.role)
-            ) {
+            // Check if user has admin privileges (check JWT role directly)
+            const userRole = req.user.role;
+            if (!["admin", "super_admin", "medical_officer"].includes(userRole)) {
                 res.status(403).json({
                     success: false,
                     message: "Access denied. Admin privileges required.",
@@ -631,6 +628,7 @@ router.patch(
 
             // Get current application
             const application = await applicationRepo.findById(id);
+            
             if (!application) {
                 res.status(404).json({
                     success: false,
@@ -639,6 +637,8 @@ router.patch(
                 return;
             }
 
+            console.log("📝 Status change:", application.applicationNumber, application.status, "→", status);
+
             // Update application status
             const updatedApplication = await applicationRepo.updateStatus(
                 id,
@@ -646,6 +646,17 @@ router.patch(
                 userId,
                 comments
             );
+
+            if (!updatedApplication) {
+                console.error("❌ FAILED: Status update returned null");
+                res.status(500).json({
+                    success: false,
+                    message: "Failed to update status - database returned null. Check RLS policies.",
+                });
+                return;
+            }
+
+            console.log("✅ Status updated successfully:", updatedApplication.status);
 
             // If amount passed is provided, update it
             if (amountPassed !== undefined && updatedApplication) {
@@ -696,6 +707,7 @@ router.patch(
                 data: { status, comments, amountPassed },
             });
         } catch (error) {
+            console.error("❌ STATUS UPDATE FAILED:", error);
             logger.error("Update application status error:", error);
             throw error;
         }

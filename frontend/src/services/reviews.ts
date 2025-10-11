@@ -403,6 +403,24 @@ class ReviewService {
         return response.data || null;
     }
 
+    async updateEligibilityCheck(
+        applicationId: string,
+        checkData: Partial<EligibilityCheck>
+    ): Promise<EligibilityCheck> {
+        const response = await apiService.patch<EligibilityCheck>(
+            `/reviews/eligibility/${applicationId}`,
+            checkData
+        );
+
+        if (!response.success || !response.data) {
+            throw new Error(
+                response.message || "Failed to update eligibility check"
+            );
+        }
+
+        return response.data;
+    }
+
     // ========== MEDICAL ASSESSMENTS ==========
 
     async performMedicalAssessment(

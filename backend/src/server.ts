@@ -7,7 +7,7 @@ import { connectDatabase } from "./database/connection";
 // Load environment variables
 dotenv.config();
 
-const PORT = process.env.BACKEND_PORT || process.env.PORT || 3003;
+const PORT = process.env.BACKEND_PORT || process.env.PORT || 3005;
 
 async function startServer() {
     try {
