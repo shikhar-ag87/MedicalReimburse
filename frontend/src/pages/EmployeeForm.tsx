@@ -44,6 +44,8 @@ const EmployeeForm = () => {
         submissionResult,
         error: submissionError,
         resetSubmission,
+        uploadProgress,
+        uploadStatus,
     } = useApplicationSubmission();
 
     const { isServerOnline } = useServerHealth();
@@ -101,7 +103,13 @@ const EmployeeForm = () => {
 
     const handleSubmit = async () => {
         try {
-            console.log("Submitting application with form data:", formData);
+            console.log("=== FINAL FORM SUBMISSION ===");
+            console.log("Form data:", formData);
+            console.log("Documents:", formData.documents);
+            console.log("Uploaded files:", formData.documents.uploadedFiles);
+            console.log("Number of files:", formData.documents.uploadedFiles.length);
+            console.log("Files are File objects?", formData.documents.uploadedFiles.map(f => f instanceof File));
+            
             await submitApplication(formData);
             console.log("Application submitted successfully");
         } catch (error) {
@@ -368,11 +376,23 @@ const EmployeeForm = () => {
                                 New Mehrauli Road, New Delhi
                             </div>
                             {isSubmitting && (
-                                <div className="flex items-center space-x-2 text-gov-accent-600 mt-2">
-                                    <div className="w-4 h-4 border-2 border-gov-accent-600 border-t-transparent rounded-full animate-spin"></div>
-                                    <span className="text-sm">
-                                        Submitting...
-                                    </span>
+                                <div className="flex flex-col space-y-2 text-gov-accent-600 mt-2">
+                                    <div className="flex items-center space-x-2">
+                                        <div className="w-4 h-4 border-2 border-gov-accent-600 border-t-transparent rounded-full animate-spin"></div>
+                                        <span className="text-sm font-semibold">
+                                            {uploadStatus || "Submitting..."}
+                                        </span>
+                                        <span className="text-sm font-bold">
+                                            {uploadProgress}%
+                                        </span>
+                                    </div>
+                                    {/* Mini Progress Bar */}
+                                    <div className="w-48 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div 
+                                            className="h-full bg-gradient-to-r from-gov-accent-500 to-gov-secondary-500 transition-all duration-500"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        ></div>
+                                    </div>
                                 </div>
                             )}
                         </div>

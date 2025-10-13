@@ -253,6 +253,8 @@ router.get(
 
                     return {
                         ...app,
+                        expenses: expenses, // Include full expense array
+                        documents: documents, // Include full documents array
                         expenseCount: expenses.length,
                         documentCount: documents.length,
                         totalExpenseClaimed: expenses.reduce(

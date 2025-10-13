@@ -243,6 +243,7 @@ CREATE TABLE application_documents (
     application_id UUID NOT NULL REFERENCES medical_applications(id) ON DELETE CASCADE,
     document_type document_type NOT NULL,
     file_name VARCHAR(255) NOT NULL,
+    original_name VARCHAR(255),
     file_path TEXT NOT NULL,
     file_size INTEGER,
     mime_type VARCHAR(100),
@@ -284,13 +285,17 @@ CREATE INDEX idx_audit_logs_admin_user ON audit_logs(admin_user_id);
 -- Enable RLS
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
--- Policy: Anyone can create audit logs
-CREATE POLICY "Anyone can create audit logs" ON audit_logs
+-- Policy: Anyone can insert audit logs (anonymous operations, file uploads, etc.)
+CREATE POLICY "Allow all inserts to audit_logs" ON audit_logs
     FOR INSERT WITH CHECK (true);
 
--- Policy: Service role can view all audit logs
-CREATE POLICY "Service role can view audit logs" ON audit_logs
-    FOR SELECT USING (auth.role() = 'service_role');
+-- Policy: Service role has full access to view audit logs
+CREATE POLICY "Service role full access to audit_logs" ON audit_logs
+    FOR ALL USING (auth.role() = 'service_role');
+
+-- Policy: Allow anon role to insert audit logs
+CREATE POLICY "Anon can insert audit logs" ON audit_logs
+    FOR INSERT TO anon WITH CHECK (true);
 
 -- =============================================================================
 -- FUNCTIONS AND TRIGGERS

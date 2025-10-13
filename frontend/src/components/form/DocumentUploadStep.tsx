@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Upload, File, CheckCircle, AlertCircle, X } from "lucide-react";
+import { Upload, File as FileIcon, CheckCircle, AlertCircle, X } from "lucide-react";
 import { StepProps, DocumentData } from "../../types/form";
 
 const DocumentUploadStep: React.FC<StepProps> = ({
@@ -11,8 +11,18 @@ const DocumentUploadStep: React.FC<StepProps> = ({
 }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Debug: Log current files when component renders
+    console.log("=== DOCUMENT UPLOAD STEP RENDERED ===");
+    console.log("Current uploaded files:", formData.documents.uploadedFiles);
+    console.log("Number of files:", formData.documents.uploadedFiles.length);
+    console.log("File types:", formData.documents.uploadedFiles.map(f => 
+        f instanceof File ? 'File object' : typeof f
+    ));
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        console.log("=== STEP 5 SUBMIT (Moving to Step 6) ===");
+        console.log("Files in formData:", formData.documents.uploadedFiles.length);
         onNext();
     };
 
@@ -29,6 +39,15 @@ const DocumentUploadStep: React.FC<StepProps> = ({
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
             const newFiles = Array.from(e.target.files);
+            console.log("=== FILES SELECTED IN STEP 5 ===");
+            console.log("Number of files:", newFiles.length);
+            console.log("Files:", newFiles.map(f => ({
+                name: f.name,
+                size: f.size,
+                type: f.type,
+                isFile: f instanceof File
+            })));
+            
             updateFormData("documents", {
                 ...formData.documents,
                 uploadedFiles: [
@@ -36,6 +55,9 @@ const DocumentUploadStep: React.FC<StepProps> = ({
                     ...newFiles,
                 ],
             });
+            
+            console.log("Files added to formData.documents.uploadedFiles");
+            console.log("Total files now:", formData.documents.uploadedFiles.length + newFiles.length);
         }
     };
 
@@ -273,7 +295,7 @@ const DocumentUploadStep: React.FC<StepProps> = ({
                                             className="flex items-center justify-between bg-white p-3 rounded-lg border border-gov-neutral-200"
                                         >
                                             <div className="flex items-center space-x-3">
-                                                <File className="w-5 h-5 text-gov-primary-600 flex-shrink-0" />
+                                                <FileIcon className="w-5 h-5 text-gov-primary-600 flex-shrink-0" />
                                                 <div>
                                                     <div className="text-sm font-medium text-gov-neutral-800">
                                                         {file.name}

@@ -371,15 +371,11 @@ router.get(
 
         const db = await getDatabase();
         const client = (db as SupabaseConnection).getClient();
+        
+        // Simple query without joins to avoid relationship errors
         const { data, error } = await client
             .from("document_reviews")
-            .select(
-                `
-                *,
-                reviewer:admin_users!reviewer_id(name, email),
-                document:documents(file_name, document_type)
-            `
-            )
+            .select("*")
             .eq("application_id", applicationId)
             .order("created_at", { ascending: false });
 

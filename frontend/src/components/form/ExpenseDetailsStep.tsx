@@ -250,19 +250,17 @@ const ExpenseDetailsStep: React.FC<StepProps> = ({
                                                             step="0.01"
                                                             min="0"
                                                             value={
-                                                                expense.amountClaimed ||
-                                                                ""
+                                                                expense.amountClaimed === 0 ? "" : expense.amountClaimed
                                                             }
-                                                            onChange={(e) =>
+                                                            onChange={(e) => {
+                                                                const value = e.target.value;
+                                                                const numValue = value === "" ? 0 : parseFloat(value);
                                                                 updateExpenseItem(
                                                                     index,
                                                                     "amountClaimed",
-                                                                    parseFloat(
-                                                                        e.target
-                                                                            .value
-                                                                    ) || 0
-                                                                )
-                                                            }
+                                                                    isNaN(numValue) ? 0 : numValue
+                                                                );
+                                                            }}
                                                             className={`input-gov text-sm ${
                                                                 validationErrors[
                                                                     `expense_${index}_amountClaimed`
@@ -271,6 +269,7 @@ const ExpenseDetailsStep: React.FC<StepProps> = ({
                                                                     : ""
                                                             }`}
                                                             placeholder="0.00"
+                                                            required
                                                         />
                                                         {validationErrors[
                                                             `expense_${index}_amountClaimed`

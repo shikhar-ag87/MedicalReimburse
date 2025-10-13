@@ -19,10 +19,13 @@ interface DocumentReviewPanelProps {
 
 interface ApplicationDocument {
     id: string;
-    document_type: string;
-    file_path: string;
-    file_name: string;
-    uploaded_at: string;
+    documentType: string;
+    filePath: string;
+    fileName: string;
+    originalName?: string;
+    uploadedAt: string | Date;
+    fileSize?: number;
+    mimeType?: string;
 }
 
 export interface DocumentReviewData {
@@ -110,9 +113,17 @@ const DocumentReviewPanel: React.FC<DocumentReviewPanelProps> = ({
     const getDocumentStatus = (docId: string) => {
         const existing = existingReviews[docId];
         if (existing) {
-            if (existing.isVerified && existing.isComplete) return "verified";
-            if (!existing.isVerified) return "rejected";
-            return "pending";
+            // Verified = all three checkboxes checked (green)
+            if (existing.isVerified && existing.isComplete && existing.isLegible) 
+                return "verified";
+            
+            // Has issues = reviewer unchecked "Legible" (document unreadable) (red)
+            if (existing.isLegible === false) 
+                return "rejected";
+            
+            // Partially reviewed = some boxes checked but not all (yellow)
+            if (existing.isVerified || existing.isComplete) 
+                return "pending";
         }
         return "not_reviewed";
     };
@@ -156,10 +167,10 @@ const DocumentReviewPanel: React.FC<DocumentReviewPanelProps> = ({
     };
 
     const groupedDocuments = documents.reduce((acc, doc) => {
-        if (!acc[doc.document_type]) {
-            acc[doc.document_type] = [];
+        if (!acc[doc.documentType]) {
+            acc[doc.documentType] = [];
         }
-        acc[doc.document_type].push(doc);
+        acc[doc.documentType].push(doc);
         return acc;
     }, {} as Record<string, ApplicationDocument[]>);
 
@@ -193,12 +204,12 @@ const DocumentReviewPanel: React.FC<DocumentReviewPanelProps> = ({
                                         <div className="px-4 py-3 flex items-center justify-between">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-gray-900 truncate">
-                                                    {doc.file_name}
+                                                    {doc.originalName || doc.fileName}
                                                 </p>
                                                 <p className="text-xs text-gray-500">
                                                     Uploaded:{" "}
                                                     {new Date(
-                                                        doc.uploaded_at
+                                                        doc.uploadedAt
                                                     ).toLocaleString()}
                                                 </p>
                                                 {existingReview && (
@@ -212,12 +223,27 @@ const DocumentReviewPanel: React.FC<DocumentReviewPanelProps> = ({
                                             <div className="flex items-center space-x-3">
                                                 {getStatusBadge(status)}
                                                 <button
+                                                    onClick={() => {
+                                                        // Extract relative path from full path
+                                                        // filePath is like: /home/aloo/MedicalReimburse/backend/uploads/app-id/file.pdf
+                                                        // We need: /uploads/app-id/file.pdf
+                                                        const relativePath = doc.filePath.includes('/uploads/')
+                                                            ? doc.filePath.substring(doc.filePath.indexOf('/uploads/'))
+                                                            : `/uploads/${doc.filePath}`;
+                                                        const fileUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:3005'}${relativePath}`;
+                                                        window.open(fileUrl, '_blank');
+                                                    }}
                                                     className="text-blue-600 hover:text-blue-800 p-1"
                                                     title="View Document"
                                                 >
                                                     <Eye className="w-5 h-5" />
                                                 </button>
                                                 <button
+                                                    onClick={() => {
+                                                        // Use download endpoint that forces download
+                                                        const downloadUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:3005'}/api/files/download/${doc.id}`;
+                                                        window.location.href = downloadUrl;
+                                                    }}
                                                     className="text-gray-600 hover:text-gray-800 p-1"
                                                     title="Download"
                                                 >

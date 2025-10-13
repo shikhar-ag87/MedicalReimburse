@@ -110,11 +110,16 @@ const ComprehensiveReviewModal: React.FC<ComprehensiveReviewModalProps> = ({
                 const reviews = await reviewService.getDocumentReviews(
                     application.id
                 );
+                console.log("=== DOCUMENT REVIEWS LOADED ===");
+                console.log("Reviews from API:", reviews);
                 const byDoc: Record<string, any> = {};
                 for (const r of reviews) {
+                    // Try both camelCase and snake_case
                     const docId = (r as any).documentId || (r as any).document_id;
+                    console.log("Review entry:", r, "Document ID:", docId);
                     if (docId) byDoc[docId] = r;
                 }
+                console.log("Mapped reviews by documentId:", byDoc);
                 setDocumentReviews(byDoc);
             }
 
@@ -449,7 +454,154 @@ const ComprehensiveReviewModal: React.FC<ComprehensiveReviewModalProps> = ({
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] flex flex-col">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[90vh] flex">
+                {/* Left Sidebar - Instructions & Guidelines */}
+                <div className="w-80 bg-gradient-to-b from-blue-50 to-indigo-50 border-r border-gray-200 overflow-y-auto flex-shrink-0">
+                    <div className="p-6 space-y-6">
+                        {/* Header */}
+                        <div>
+                            <h3 className="text-lg font-bold text-indigo-900 mb-2">
+                                📋 Review Guidelines
+                            </h3>
+                            <p className="text-xs text-indigo-600">
+                                Follow these steps to complete your review
+                            </p>
+                        </div>
+
+                        {/* Role-specific Instructions */}
+                        {reviewStage === "initial_obc" && (
+                            <div className="space-y-4">
+                                <div className="bg-white rounded-lg p-4 shadow-sm">
+                                    <h4 className="font-semibold text-purple-900 mb-2 text-sm">
+                                        🔍 OBC Initial Review
+                                    </h4>
+                                    <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside">
+                                        <li>Check employee eligibility
+                                            <ul className="ml-4 mt-1 list-disc list-inside text-xs text-gray-600">
+                                                <li>Verify SC/ST/OBC status</li>
+                                                <li>Check CGHS card validity</li>
+                                                <li>Confirm employee ID</li>
+                                            </ul>
+                                        </li>
+                                        <li>Review all documents</li>
+                                        <li>Verify expense items</li>
+                                        <li>Add comments if needed</li>
+                                        <li>Click "Forward to Health Centre"</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        )}
+
+                        {reviewStage === "health_centre" && (
+                            <div className="space-y-4">
+                                <div className="bg-white rounded-lg p-4 shadow-sm">
+                                    <h4 className="font-semibold text-green-900 mb-2 text-sm">
+                                        🏥 Medical Assessment
+                                    </h4>
+                                    <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside">
+                                        <li>Review medical documents
+                                            <ul className="ml-4 mt-1 list-disc list-inside text-xs text-gray-600">
+                                                <li>Check prescriptions</li>
+                                                <li>Verify medical bills</li>
+                                                <li>Review discharge summary</li>
+                                            </ul>
+                                        </li>
+                                        <li>Validate treatment necessity</li>
+                                        <li>Approve eligible amounts</li>
+                                        <li>Document findings</li>
+                                        <li>Click "Return to OBC"</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        )}
+
+                        {reviewStage === "final_obc" && (
+                            <div className="space-y-4">
+                                <div className="bg-white rounded-lg p-4 shadow-sm">
+                                    <h4 className="font-semibold text-blue-900 mb-2 text-sm">
+                                        ✅ Final OBC Review
+                                    </h4>
+                                    <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside">
+                                        <li>Review Health Centre assessment</li>
+                                        <li>Verify approved amounts</li>
+                                        <li>Check all comments resolved</li>
+                                        <li>Final document verification</li>
+                                        <li>Click "Approve & Forward"</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        )}
+
+                        {reviewStage === "super_admin" && (
+                            <div className="space-y-4">
+                                <div className="bg-white rounded-lg p-4 shadow-sm">
+                                    <h4 className="font-semibold text-amber-900 mb-2 text-sm">
+                                        👑 Final Approval
+                                    </h4>
+                                    <ol className="text-xs text-gray-700 space-y-2 list-decimal list-inside">
+                                        <li>Review complete workflow</li>
+                                        <li>Verify all approvals</li>
+                                        <li>Check final amount</li>
+                                        <li>Authorize reimbursement</li>
+                                    </ol>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Quick Tips */}
+                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-2 text-sm flex items-center">
+                                💡 Quick Tips
+                            </h4>
+                            <ul className="text-xs text-gray-600 space-y-2">
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>Click document names to review them</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>Use 👁️ to view, ⬇️ to download</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>Mark documents as verified after review</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>Add comments to communicate with other reviewers</span>
+                                </li>
+                                <li className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>Check timeline tab to see history</span>
+                                </li>
+                            </ul>
+                        </div>
+
+                        {/* Status Key */}
+                        <div className="bg-white rounded-lg p-4 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-2 text-sm">
+                                🔑 Status Indicators
+                            </h4>
+                            <div className="space-y-2 text-xs">
+                                <div className="flex items-center">
+                                    <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                                    <span className="text-gray-700">Verified / Complete</span>
+                                </div>
+                                <div className="flex items-center">
+                                    <span className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></span>
+                                    <span className="text-gray-700">Pending Review</span>
+                                </div>
+                                <div className="flex items-center">
+                                    <span className="w-3 h-3 bg-red-500 rounded-full mr-2"></span>
+                                    <span className="text-gray-700">Issues Found</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-200">
                     <div>
@@ -473,179 +625,6 @@ const ComprehensiveReviewModal: React.FC<ComprehensiveReviewModalProps> = ({
                         <X className="w-6 h-6" />
                     </button>
                 </div>
-
-                {/* Contextual Review Guidance - Shows different info based on workflow stage */}
-                {reviewStage !== "view_only" && (
-                    <div className="mx-6 mt-4">
-                        {/* Initial OBC Review (pending → under_review) */}
-                        {reviewStage === "initial_obc" && (
-                            <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                                        <CheckSquare className="w-6 h-6 text-purple-600" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-lg font-semibold text-purple-900 mb-2">
-                                            Initial OBC Review
-                                        </h3>
-                                        <p className="text-sm text-purple-700 mb-3">
-                                            Perform initial eligibility check and document verification. After your review, this application will be forwarded to the Health Centre for medical assessment.
-                                        </p>
-                                        <div className="bg-purple-100 rounded p-3 text-sm">
-                                            <p className="font-medium text-purple-900 mb-1">Review Checklist:</p>
-                                            <ul className="list-disc list-inside space-y-1 text-purple-700">
-                                                <li>Verify employee eligibility and entitlements</li>
-                                                <li>Check all required documents are uploaded</li>
-                                                <li>Review expense items for completeness</li>
-                                                <li>Add comments for Health Centre's attention</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Health Centre Review (under_review → back_to_obc) */}
-                        {reviewStage === "health_centre" && (
-                            <div className="bg-green-50 border-2 border-green-200 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                                        <FileText className="w-6 h-6 text-green-600" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-lg font-semibold text-green-900 mb-2">
-                                            Medical Assessment Review
-                                        </h3>
-                                        <p className="text-sm text-green-700 mb-3">
-                                            Conduct medical assessment of the claim. Review medical documents, validate treatments, and approve eligible amounts. Your assessment will be sent back to OBC for final processing.
-                                        </p>
-                                        <div className="bg-green-100 rounded p-3 text-sm">
-                                            <p className="font-medium text-green-900 mb-1">Assessment Tasks:</p>
-                                            <ul className="list-disc list-inside space-y-1 text-green-700">
-                                                <li>Verify medical necessity of treatments</li>
-                                                <li>Check medical documents authenticity</li>
-                                                <li>Approve amounts based on medical rules</li>
-                                                <li>Document any findings or concerns</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Final OBC Review (back_to_obc → approved) */}
-                        {reviewStage === "final_obc" && (
-                            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                        <CheckCircle className="w-6 h-6 text-blue-600" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-lg font-semibold text-blue-900 mb-2">
-                                            Health Centre Assessment Completed
-                                        </h3>
-                                        <div className="grid grid-cols-2 gap-4 text-sm mb-3">
-                                            <div>
-                                                <span className="text-blue-700 font-medium">Medical Review:</span>
-                                                <span className="ml-2 px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                                                    Completed
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="text-blue-700 font-medium">
-                                                    {application.totalAmountPassed && application.totalAmountPassed > 0 
-                                                        ? "Amount Approved:" 
-                                                        : "Amount Claimed:"}
-                                                </span>
-                                                <span className="ml-2 text-blue-900 font-semibold">
-                                                    ₹{(application.totalAmountPassed && application.totalAmountPassed > 0 
-                                                        ? application.totalAmountPassed 
-                                                        : application.totalAmountClaimed || 0).toLocaleString()}
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {comments.length > 0 && (
-                                            <div className="bg-white rounded p-3 mb-3">
-                                                <span className="text-blue-700 font-medium text-sm">Health Centre Remarks:</span>
-                                                <div className="mt-2 space-y-2">
-                                                    {comments.slice(-2).map((comment) => (
-                                                        <div key={comment.id} className="text-sm border-l-2 border-blue-300 pl-3">
-                                                            <div className="flex items-center gap-2 mb-1">
-                                                                <span className="font-medium text-gray-700">
-                                                                    {comment.commenterName}
-                                                                </span>
-                                                                <span className="text-gray-400 text-xs">
-                                                                    {new Date(comment.createdAt).toLocaleDateString("en-IN")}
-                                                                </span>
-                                                            </div>
-                                                            <p className="text-gray-600">{comment.commentText}</p>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                        <div className="bg-blue-100 rounded p-3 text-sm">
-                                            <p className="font-medium text-blue-900 mb-1">Final Review Tasks:</p>
-                                            <ul className="list-disc list-inside space-y-1 text-blue-700">
-                                                <li>Review Health Centre's medical assessment</li>
-                                                <li>Verify approved amounts are appropriate</li>
-                                                <li>Add final remarks if needed</li>
-                                                <li>Forward to Super Admin for reimbursement</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Super Admin Review (approved → reimbursed) */}
-                        {reviewStage === "super_admin" && (
-                            <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center">
-                                        <CheckCircle className="w-6 h-6 text-amber-600" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <h3 className="text-lg font-semibold text-amber-900 mb-2">
-                                            Final Approval & Reimbursement
-                                        </h3>
-                                        <p className="text-sm text-amber-700 mb-3">
-                                            This application has completed the full review workflow. Review the approval chain and authorize reimbursement.
-                                        </p>
-                                        <div className="grid grid-cols-3 gap-3 mb-3 text-sm">
-                                            <div className="bg-white rounded p-2">
-                                                <span className="text-amber-700 font-medium block mb-1">OBC Initial</span>
-                                                <span className="text-green-600 text-xs">✓ Reviewed</span>
-                                            </div>
-                                            <div className="bg-white rounded p-2">
-                                                <span className="text-amber-700 font-medium block mb-1">Health Centre</span>
-                                                <span className="text-green-600 text-xs">✓ Assessed</span>
-                                            </div>
-                                            <div className="bg-white rounded p-2">
-                                                <span className="text-amber-700 font-medium block mb-1">OBC Final</span>
-                                                <span className="text-green-600 text-xs">✓ Approved</span>
-                                            </div>
-                                        </div>
-                                        <div className="bg-amber-100 rounded p-3 text-sm">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-amber-700 font-medium">
-                                                    {application.totalAmountPassed && application.totalAmountPassed > 0 
-                                                        ? "Final Approved Amount:" 
-                                                        : "Claimed Amount:"}
-                                                </span>
-                                                <span className="text-amber-900 font-bold text-lg">
-                                                    ₹{(application.totalAmountPassed && application.totalAmountPassed > 0 
-                                                        ? application.totalAmountPassed 
-                                                        : application.totalAmountClaimed || 0).toLocaleString()}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
 
                 {/* Success/Error Messages */}
                 {(error || success) && (
@@ -970,6 +949,7 @@ const ComprehensiveReviewModal: React.FC<ComprehensiveReviewModalProps> = ({
                             </button>
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
         </div>

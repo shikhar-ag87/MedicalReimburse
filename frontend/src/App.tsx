@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import EmployeeForm from './pages/EmployeeForm';
@@ -7,6 +6,7 @@ import AdminLogin from './pages/AdminLogin';
 import OBCDashboard from './pages/OBCDashboard';
 import HealthCentreDashboard from './pages/HealthCentreDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import PublicQueryResponse from './pages/PublicQueryResponse';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -19,6 +19,7 @@ function App() {
             <Routes>
               <Route path="/" element={<EmployeeForm />} />
               <Route path="/status" element={<StatusTracker />} />
+              <Route path="/query/:token" element={<PublicQueryResponse />} />
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin/obc" element={<OBCDashboard />} />
               <Route path="/admin/health-centre" element={<HealthCentreDashboard />} />

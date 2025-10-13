@@ -14,6 +14,8 @@ export interface UseApplicationSubmissionResult {
     submissionResult: ApplicationSubmissionResponse | null;
     error: string | null;
     resetSubmission: () => void;
+    uploadProgress: number;
+    uploadStatus: string;
 }
 
 /**
@@ -25,35 +27,62 @@ export const useApplicationSubmission = (): UseApplicationSubmissionResult => {
     const [submissionResult, setSubmissionResult] =
         useState<ApplicationSubmissionResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadStatus, setUploadStatus] = useState("");
 
     const submitApplication = useCallback(async (formData: FormData) => {
         setIsSubmitting(true);
         setError(null);
+        setUploadProgress(0);
+        setUploadStatus("Submitting application...");
 
         try {
             console.log("Submitting application with data:", formData);
             const result = await applicationService.submitApplication(formData);
-
+            
+            setUploadProgress(50);
+            setUploadStatus("Application created successfully!");
             console.log("Application submitted successfully:", result);
 
             // Upload documents if any files were selected
             if (formData.documents.uploadedFiles && formData.documents.uploadedFiles.length > 0) {
-                console.log(`Uploading ${formData.documents.uploadedFiles.length} documents for application ${result.applicationId}`);
-                try {
-                    await applicationService.uploadDocuments(
-                        result.applicationId,
-                        formData.documents.uploadedFiles
-                    );
-                    console.log("Documents uploaded successfully");
-                } catch (uploadError) {
-                    console.error("Document upload failed:", uploadError);
-                    // Don't fail the whole submission if documents fail to upload
-                    // But log it prominently
+                console.log("=== CHECKING UPLOADED FILES ===");
+                console.log(`Found ${formData.documents.uploadedFiles.length} files in formData`);
+                console.log("Files:", formData.documents.uploadedFiles);
+                
+                // Filter to only include actual File objects (not serialized metadata)
+                const actualFiles = formData.documents.uploadedFiles.filter(f => f instanceof File);
+                console.log(`Actual File objects: ${actualFiles.length}`);
+                
+                if (actualFiles.length > 0) {
+                    setUploadProgress(60);
+                    setUploadStatus(`Uploading ${actualFiles.length} file(s)...`);
+                    console.log(`Uploading ${actualFiles.length} actual files for application ${result.applicationId}`);
+                    try {
+                        await applicationService.uploadDocuments(
+                            result.applicationId,
+                            actualFiles
+                        );
+                        setUploadProgress(90);
+                        setUploadStatus("Files uploaded successfully!");
+                        console.log("Documents uploaded successfully");
+                    } catch (uploadError) {
+                        console.error("Document upload failed:", uploadError);
+                        setUploadStatus("Warning: Some files failed to upload");
+                        // Don't fail the whole submission if documents fail to upload
+                        // But log it prominently
+                    }
+                } else {
+                    console.warn("No actual File objects found! Files may have been serialized by auto-save.");
+                    setUploadProgress(90);
                 }
             } else {
                 console.log("No documents to upload");
+                setUploadProgress(90);
             }
 
+            setUploadProgress(100);
+            setUploadStatus("Completed!");
             setSubmissionResult(result);
             setIsSubmitted(true);
 
@@ -62,6 +91,8 @@ export const useApplicationSubmission = (): UseApplicationSubmissionResult => {
         } catch (err) {
             const errorMessage = handleApiError(err as Error);
             setError(errorMessage);
+            setUploadProgress(0);
+            setUploadStatus("");
             console.error("Application submission failed:", err);
         } finally {
             setIsSubmitting(false);
@@ -73,6 +104,8 @@ export const useApplicationSubmission = (): UseApplicationSubmissionResult => {
         setIsSubmitted(false);
         setSubmissionResult(null);
         setError(null);
+        setUploadProgress(0);
+        setUploadStatus("");
     }, []);
 
     return {
@@ -82,6 +115,8 @@ export const useApplicationSubmission = (): UseApplicationSubmissionResult => {
         submissionResult,
         error,
         resetSubmission,
+        uploadProgress,
+        uploadStatus,
     };
 };
 
@@ -167,8 +202,30 @@ export const useAutoSave = (
             setSaveError(null);
 
             try {
-                localStorage.setItem(key, JSON.stringify(formData));
+                // Create a copy of formData excluding File objects for localStorage
+                const serializableData = {
+                    ...formData,
+                    documents: {
+                        ...formData.documents,
+                        // Don't save actual File objects - they can't be serialized
+                        // We'll just save metadata for display purposes
+                        uploadedFiles: formData.documents.uploadedFiles.map(file => {
+                            if (file instanceof File) {
+                                return {
+                                    name: file.name,
+                                    size: file.size,
+                                    type: file.type,
+                                    _isSerializedFile: true  // Flag to identify serialized files
+                                };
+                            }
+                            return file;
+                        })
+                    }
+                };
+                
+                localStorage.setItem(key, JSON.stringify(serializableData));
                 setLastSaved(new Date());
+                console.log("Auto-save: Saved form data (files serialized as metadata only)");
             } catch (error) {
                 console.error("Auto-save failed:", error);
                 setSaveError("Failed to save form data");
@@ -200,6 +257,15 @@ export const useSavedFormData = (
             const saved = localStorage.getItem(key);
             if (saved) {
                 const parsedData = JSON.parse(saved);
+                
+                // Check if files were serialized (and thus lost)
+                if (parsedData.documents?.uploadedFiles?.some((f: any) => f._isSerializedFile)) {
+                    console.warn("⚠️ Form was restored from localStorage but uploaded files were lost.");
+                    console.warn("You'll need to re-upload your files before submitting.");
+                    // Clear the serialized file metadata so user knows to re-upload
+                    parsedData.documents.uploadedFiles = [];
+                }
+                
                 setSavedData(parsedData);
                 console.log("Loaded saved form data:", parsedData);
             }

@@ -348,7 +348,42 @@ The system uses a **modular database architecture** that allows easy switching b
 -   Performance optimizations
 -   Production logging
 
-## 📈 Performance Optimizations
+## � Query/Communication System
+
+A complete admin-user communication platform for handling queries about reimbursement applications.
+
+### Features
+- **Admin Query Creation** - Send queries directly from review interface
+- **Secure Token Access** - Employees access via email link (no login needed)
+- **Conversation Threads** - Full chat-like message history
+- **File Attachments** - Upload supporting documents
+- **Priority Levels** - Mark urgent queries
+- **Internal Notes** - Admin-only private notes
+- **Status Tracking** - Open, replied, resolved states
+
+### Documentation
+- `QUERY_SYSTEM_COMPLETE.md` - Full system documentation (550+ lines)
+- `QUERY_SYSTEM_QUICKSTART.md` - Step-by-step setup guide (400+ lines)
+- `QUERY_SYSTEM_SUMMARY.md` - Implementation status
+- `QUERY_SYSTEM_DIAGRAM.md` - Visual architecture guide
+- `database/query_system_schema.sql` - Database schema
+
+### Quick Setup
+```bash
+# 1. Install database schema in Supabase
+psql -f database/query_system_schema.sql
+
+# 2. Backend already configured ✅
+# - Route: backend/src/routes/queries.ts
+# - 11 endpoints ready
+
+# 3. Frontend service ready ✅
+# - Service: frontend/src/services/queryService.ts
+
+# 4. Create UI components (see QUERY_SYSTEM_QUICKSTART.md)
+```
+
+## �📈 Performance Optimizations
 
 -   Code splitting with React.lazy()
 -   Image optimization

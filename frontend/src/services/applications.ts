@@ -218,16 +218,39 @@ class ApplicationService {
         applicationId: string,
         files: File[]
     ): Promise<{ uploadedFiles: string[] }> {
+        console.log("=== UPLOAD DOCUMENTS CALLED ===");
+        console.log("Application ID:", applicationId);
+        console.log("Files array:", files);
+        console.log("Files count:", files.length);
+        console.log("File details:", files.map(f => ({
+            name: f.name,
+            size: f.size,
+            type: f.type,
+            isFile: f instanceof File
+        })));
+
         const formData = new FormData();
 
         formData.append("applicationId", applicationId);
-        files.forEach((file) => {
+        formData.append("documentType", "other");
+        
+        files.forEach((file, index) => {
+            console.log(`Appending file ${index}:`, file.name, file.type, file.size);
             formData.append("files", file);
         });
+
+        console.log("FormData created, entries:");
+        for (let pair of (formData as any).entries()) {
+            console.log(pair[0], pair[1]);
+        }
+
+        console.log(`Uploading ${files.length} files for application ${applicationId}`);
 
         const response = await apiService.uploadFile<{
             uploadedFiles: string[];
         }>("/files/upload", formData);
+
+        console.log("Upload response:", response);
 
         if (!response.success || !response.data) {
             throw new Error(response.message || "Failed to upload documents");
